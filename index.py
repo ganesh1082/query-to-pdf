@@ -55,8 +55,8 @@ async def main():
     config = ReportConfig(
         title=f"{report_num}_{report_title_safe}",
         subtitle=f"A Strategic Analysis of: {args.prompt}",
-        author="Strategic AI Analyst",
-        company="Nexus Research Group",
+        author="Shubham Gajjar",
+        company="abc group",
         report_type=ReportType.MARKET_RESEARCH,
         target_audience="C-suite executives and investors",
         brand_colors={"primary": "#0D203D", "accent": "#4A90E2"},

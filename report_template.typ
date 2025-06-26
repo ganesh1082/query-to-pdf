@@ -31,7 +31,7 @@
 )
 
 // Cover page function
-#let cover-page(title, subtitle, author, company, date, logo-path) = {
+#let cover-page(title, subtitle, author, company, date, logo-path) = show {
   align(center)[
     v(3cm, weak: true)
     
