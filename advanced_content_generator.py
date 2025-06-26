@@ -29,7 +29,7 @@ class AdvancedContentGenerator:
         if api_key:
             try:
                 genai.configure(api_key=api_key)
-                self.model = genai.GenerativeModel('gemini-1.5-flash')
+                self.model = genai.GenerativeModel('gemini-2.0-flash')
             except Exception as e:
                 print(f"⚠️ Could not configure Gemini. Error: {e}")
                 self.model = None
@@ -81,7 +81,9 @@ class AdvancedContentGenerator:
             return report_data
         except Exception as e:
             print(f"❌ Error generating full report blueprint: {e}")
-            print(f"  ⚠️ Raw AI response was:\n---\n{response.text[:500]}...\n---")
+            # Only try to access response.text if response exists
+            if 'response' in locals() and hasattr(response, 'text'):
+                print(f"  ⚠️ Raw AI response was:\n---\n{response.text[:500]}...\n---")
             return self._get_mock_report_blueprint()
 
     def _get_mock_report_blueprint(self) -> Dict[str, Any]:

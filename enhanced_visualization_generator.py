@@ -64,23 +64,73 @@ class PremiumVisualizationGenerator:
 
     def _create_bar_chart(self, data, title, palette, chart_type, safe_title):
         labels, values = data.get("labels", []), data.get("values", [])
-        if not all([labels, values, len(labels) == len(values)]): return self._create_placeholder_chart(title)
+        if not all([labels, values, len(labels) == len(values)]): 
+            return self._create_placeholder_chart(title)
+        
+        # Validate that values are numeric and not lists
+        try:
+            # Convert to simple numeric values
+            clean_values = []
+            for val in values:
+                if isinstance(val, (list, dict)):
+                    # If it's a list or dict, try to extract a numeric value
+                    if isinstance(val, list) and len(val) > 0:
+                        clean_values.append(float(val[0]) if isinstance(val[0], (int, float)) else 0)
+                    else:
+                        clean_values.append(0)
+                else:
+                    clean_values.append(float(val) if isinstance(val, (int, float)) else 0)
+            
+            # Ensure labels are strings
+            clean_labels = [str(label) for label in labels]
+            
+        except (ValueError, TypeError):
+            return self._create_placeholder_chart(f"Invalid data for {title}")
         
         fig, ax = plt.subplots(figsize=(10, 7))
         orient = 'h' if chart_type == "horizontalBar" else 'v'
-        sns.barplot(x=values if orient == 'h' else labels, y=labels if orient == 'h' else values, ax=ax, palette=palette, orient=orient)
+        
+        try:
+            sns.barplot(x=clean_values if orient == 'h' else clean_labels, 
+                       y=clean_labels if orient == 'h' else clean_values, 
+                       ax=ax, palette=palette, orient=orient)
+        except Exception as e:
+            print(f"  ⚠️ Error creating bar chart for '{title}': {e}")
+            return self._create_placeholder_chart(f"Chart creation failed for {title}")
+        
         ax.set_title(title, fontsize=14, fontweight='bold')
         plt.tight_layout()
         return self._save_plot_to_file(fig, f"bar_{safe_title}")
 
     def _create_line_or_area_chart(self, data, title, chart_type, safe_title):
         labels, values = data.get("labels", []), data.get("values", [])
-        if not all([labels, values, len(labels) == len(values)]): return self._create_placeholder_chart(title)
+        if not all([labels, values, len(labels) == len(values)]): 
+            return self._create_placeholder_chart(title)
+        
+        # Validate that values are numeric and not lists
+        try:
+            # Convert to simple numeric values
+            clean_values = []
+            for val in values:
+                if isinstance(val, (list, dict)):
+                    # If it's a list or dict, try to extract a numeric value
+                    if isinstance(val, list) and len(val) > 0:
+                        clean_values.append(float(val[0]) if isinstance(val[0], (int, float)) else 0)
+                    else:
+                        clean_values.append(0)
+                else:
+                    clean_values.append(float(val) if isinstance(val, (int, float)) else 0)
+            
+            # Ensure labels are strings
+            clean_labels = [str(label) for label in labels]
+            
+        except (ValueError, TypeError):
+            return self._create_placeholder_chart(f"Invalid data for {title}")
         
         fig, ax = plt.subplots(figsize=(10, 6))
-        ax.plot(labels, values, marker='o', color=self.primary_color, lw=2)
+        ax.plot(clean_labels, clean_values, marker='o', color=self.primary_color, lw=2)
         if chart_type == "area":
-            ax.fill_between(labels, values, alpha=0.2, color=self.primary_color)
+            ax.fill_between(clean_labels, clean_values, alpha=0.2, color=self.primary_color)
         ax.set_title(title, fontsize=14, fontweight='bold')
         ax.tick_params(axis='x', rotation=25)
         plt.tight_layout()
@@ -93,7 +143,8 @@ class PremiumVisualizationGenerator:
         fig, ax = plt.subplots(figsize=(8, 8))
         wedgeprops = {"width": 0.4, "edgecolor": "w"} if chart_type == "donut" else {}
         colors = list(sns.color_palette(palette, len(labels)))  # type: ignore
-        ax.pie(values, labels=labels, autopct='%1.1f%%', startangle=90, colors=colors, wedgeprops=wedgeprops)
+        pctdistance = 0.80 if chart_type == "donut" else 0.6
+        ax.pie(values, labels=labels, autopct='%1.1f%%', startangle=90, colors=colors, wedgeprops=wedgeprops, pctdistance=pctdistance)
         ax.set_title(title, fontsize=14, fontweight='bold')
         ax.axis('equal')
         return self._save_plot_to_file(fig, f"{chart_type}_{safe_title}")

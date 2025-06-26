@@ -50,7 +50,7 @@ class ProfessionalReportGenerator:
             if chart_type and chart_type != "none":
                 print(f"  🎨 Generating '{chart_type}' chart for: {section['title']}...")
                 chart_path = self.data_visualizer.create_chart(section)
-                section["chart_path"] = chart_path 
+                section["chart_path"] = chart_path
             else:
                 section["chart_path"] = ""
         
@@ -65,6 +65,7 @@ class ProfessionalReportGenerator:
         filename = f"./generated_reports/{sanitized_title[:50]}.pdf"
         
         # Prepare the data dictionary for Typst
+        sections = blueprint.get("sections", []) or []
         report_data = {
             "title": config.title,
             "subtitle": config.subtitle,
@@ -72,10 +73,25 @@ class ProfessionalReportGenerator:
             "company": config.company,
             "logo_path": config.logo_path if os.path.exists(str(config.logo_path or '')) else "",
             "date": datetime.now().strftime('%B %d, %Y'),
-            "sections": blueprint.get("sections", [])
+            "sections": sections
         }
         
-        template_path = "report_template.typ"
+        template_path = "templates/template_0.typ"
+        
+        # Adjust chart paths to be relative to the template directory
+        for section in sections:
+            if isinstance(section, dict):
+                chart_path = section.get("chart_path")
+                if chart_path and isinstance(chart_path, str) and chart_path != "":
+                    # Convert chart path to be relative to the template directory
+                    # If chart_path is "temp_charts/filename.png", make it "../temp_charts/filename.png"
+                    if chart_path.startswith("temp_charts/"):
+                        section["chart_path"] = f"../{chart_path}"
+                    elif os.path.isabs(chart_path):
+                        # If it's an absolute path, make it relative to template directory
+                        template_dir = os.path.dirname(template_path)
+                        rel_path = os.path.relpath(chart_path, template_dir)
+                        section["chart_path"] = rel_path
         
         success = render_to_pdf_with_typst(report_data, template_path, filename)
         

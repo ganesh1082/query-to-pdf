@@ -31,12 +31,12 @@
 )
 
 // Cover page function
-#let cover-page(title, subtitle, author, company, date, logo-path) = show {
+#let cover_page(title, subtitle, author, company, date, logo_path) = {
   align(center)[
     v(3cm, weak: true)
     
-    if logo-path != none and logo-path != "" {
-      image(logo-path, width: 3cm)
+    if logo_path != none and logo_path != "" {
+      image(logo_path, width: 3cm)
       v(1.5cm, weak: true)
     }
     
@@ -68,7 +68,7 @@
 // === DOCUMENT START ===
 
 // Generate cover page
-#cover-page(
+#cover_page(
   data.title,
   data.subtitle,
   data.author,
@@ -89,8 +89,8 @@
 #for section in data.sections {
   heading(section.title)
 
-  // The content is now pre-formatted, so we can use it directly.
-  raw(section.content)
+  // The content is pre-formatted with Typst syntax, so we can use it directly.
+  [#section.content]
   
   if "chart_path" in section and section.chart_path != none and section.chart_path != "" {
     v(1em)

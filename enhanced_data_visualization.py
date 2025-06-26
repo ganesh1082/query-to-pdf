@@ -189,8 +189,8 @@ class EnhancedDataVisualizer:
                     x=dates,
                     y=values,
                     mode='lines+markers',
-                    line=dict(color=self.color_palette[0], width=3),
-                    marker=dict(size=8),
+                    line={"color": self.color_palette[0], "width": 3},
+                    marker={"size": 8},
                     name="Trend Analysis"
                 ),
                 row=2, col=2
@@ -206,8 +206,8 @@ class EnhancedDataVisualizer:
                         x=sample_dates,
                         y=sample_values,
                         mode='lines+markers',
-                        line=dict(color=self.color_palette[0], width=3),
-                        marker=dict(size=8),
+                        line={"color": self.color_palette[0], "width": 3},
+                        marker={"size": 8},
                         name="Quality Trend"
                     ),
                     row=2, col=2
@@ -269,7 +269,7 @@ class EnhancedDataVisualizer:
                 xref="paper", yref="paper",
                 x=0.5, y=0.5, xanchor='center', yanchor='middle',
                 showarrow=False,
-                font=dict(size=16, color=self.color_palette[0])
+                font={"size": 16, "color": self.color_palette[0]}
             )
             
             fig.update_layout(
@@ -290,7 +290,7 @@ class EnhancedDataVisualizer:
                 xref="paper", yref="paper",
                 x=0.5, y=0.5, xanchor='center', yanchor='middle',
                 showarrow=False,
-                font=dict(size=16, color=self.color_palette[0])
+                font={"size": 16, "color": self.color_palette[0]}
             )
         else:
             # Sort data by date if possible
@@ -307,8 +307,8 @@ class EnhancedDataVisualizer:
                 y=values,
                 mode='lines+markers',
                 name='Trend',
-                line=dict(color=self.color_palette[0], width=3),
-                marker=dict(size=8, color=self.color_palette[0])
+                line={"color": self.color_palette[0], "width": 3},
+                marker={"size": 8, "color": self.color_palette[0]}
             ))
             
             # Add a trend line if we have enough data points
@@ -317,7 +317,7 @@ class EnhancedDataVisualizer:
                     # Calculate linear trend
                     x_numeric = list(range(len(values)))
                     z = np.polyfit(x_numeric, values, 1)
-                    p = np.poly1d(z)
+                    p = np.poly1d(z.tolist())  # Convert numpy array to list
                     trend_line = [p(x) for x in x_numeric]
                     
                     fig.add_trace(go.Scatter(
@@ -325,7 +325,7 @@ class EnhancedDataVisualizer:
                         y=trend_line,
                         mode='lines',
                         name='Trend Line',
-                        line=dict(color=self.color_palette[1], width=2, dash='dash'),
+                        line={"color": self.color_palette[1], "width": 2, "dash": 'dash'},
                         opacity=0.7
                     ))
                 except ImportError:
@@ -336,7 +336,7 @@ class EnhancedDataVisualizer:
                         y=[avg_value] * len(dates),
                         mode='lines',
                         name='Average',
-                        line=dict(color=self.color_palette[1], width=2, dash='dash'),
+                        line={"color": self.color_palette[1], "width": 2, "dash": 'dash'},
                         opacity=0.7
                     ))
                 except Exception:
@@ -354,12 +354,12 @@ class EnhancedDataVisualizer:
         
         # Update layout
         fig.update_layout(
-            title=dict(
-                text="Trend Analysis - Based on Research Data",
-                x=0.5,
-                xanchor='center',
-                font=dict(size=16, color=self.color_palette[0])
-            ),
+            title={
+                'text': "Trend Analysis - Based on Research Data",
+                'x': 0.5,
+                'xanchor': 'center',
+                'font': {'size': 16, 'color': self.color_palette[0]}
+            },
             xaxis_title="Time Period",
             yaxis_title="Value",
             height=400,
@@ -408,11 +408,11 @@ class EnhancedDataVisualizer:
                 x=finding_counts,
                 y=finding_importance,
                 mode='markers+text',
-                marker=dict(
-                    size=[count * 2 for count in finding_counts],
-                    color=self.color_palette[2],
-                    opacity=0.7
-                ),
+                marker={
+                    "size": [count * 2 for count in finding_counts],
+                    "color": self.color_palette[2],
+                    "opacity": 0.7
+                },
                 text=finding_categories,
                 textposition="top center",
                 name="Importance Analysis"
@@ -463,11 +463,12 @@ class EnhancedDataVisualizer:
         ))
         
         fig.update_layout(
-            polar=dict(
-                radialaxis=dict(
-                    visible=True,
-                    range=[0, 100]
-                )),
+            polar={
+                "radialaxis": {
+                    "visible": True,
+                    "range": [0, 100]
+                }
+            },
             title={
                 'text': "Data Quality Assessment",
                 'x': 0.5,
@@ -544,12 +545,12 @@ class EnhancedDataVisualizer:
             x=market_share,
             y=growth_rate,
             mode='markers+text',
-            marker=dict(
-                size=[r/1000000 for r in revenue] if revenue else [20] * len(companies),
-                color=self.color_palette[:len(companies)],
-                opacity=0.7,
-                line=dict(width=2, color='white')
-            ),
+            marker={
+                "size": [r/1000000 for r in revenue] if revenue else [20] * len(companies),
+                "color": self.color_palette[:len(companies)],
+                "opacity": 0.7,
+                "line": {"width": 2, "color": 'white'}
+            },
             text=companies,
             textposition="top center",
             name="Competitive Position"

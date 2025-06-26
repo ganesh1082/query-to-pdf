@@ -17,7 +17,9 @@ def render_to_pdf_with_typst(report_data: Dict[str, Any], template_path: str, ou
     Returns:
         bool: True if PDF generation was successful, False otherwise.
     """
-    data_json_path = "report_data.json"
+    # Create JSON file in the same directory as the template
+    template_dir = os.path.dirname(template_path)
+    data_json_path = os.path.join(template_dir, "report_data.json")
     success = False
     
     try:
@@ -27,12 +29,23 @@ def render_to_pdf_with_typst(report_data: Dict[str, Any], template_path: str, ou
         
         print("  📄 Wrote report data to report_data.json")
 
-        # 2. Construct the Typst compile command.
+        # 2. Construct the Typst compile command with --root argument
         os.makedirs(os.path.dirname(output_path), exist_ok=True)
+        
+        # Get the project root (parent directory of templates)
+        template_dir = os.path.dirname(template_path)
+        project_root = os.path.dirname(template_dir)
+        
+        # Ensure we have a valid project root
+        if not project_root or project_root == ".":
+            project_root = os.getcwd()
+        
+        print(f"  🔍 Debug: template_dir={template_dir}, project_root={project_root}")
 
         command = [
             "typst",
             "compile",
+            "--root", project_root,
             template_path,
             output_path
         ]
