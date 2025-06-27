@@ -66,17 +66,43 @@ class ProfessionalReportGenerator:
         
         # Prepare the data dictionary for Typst
         sections = blueprint.get("sections", []) or []
+        
+        template_path = "templates/template_1.typ"
+        
+        # Adjust logo path to be relative to the template directory
+        logo_path = ""
+        if config.logo_path and os.path.exists(str(config.logo_path)):
+            if config.logo_path.startswith("assets/"):
+                # Convert assets/logo.png to ../assets/logo.png relative to templates/
+                logo_path = f"../{config.logo_path}"
+                # Check if the adjusted path exists relative to template directory
+                template_dir = os.path.dirname(template_path)
+                adjusted_path_exists = os.path.exists(os.path.join(template_dir, logo_path))
+            elif config.logo_path.startswith("templates/"):
+                # If logo is in templates directory, use just the filename
+                logo_path = os.path.basename(config.logo_path)
+                template_dir = os.path.dirname(template_path)
+                adjusted_path_exists = os.path.exists(os.path.join(template_dir, logo_path))
+            elif os.path.isabs(config.logo_path):
+                # If it's an absolute path, make it relative to template directory
+                template_dir = os.path.dirname(template_path)
+                logo_path = os.path.relpath(config.logo_path, template_dir)
+                adjusted_path_exists = os.path.exists(os.path.join(template_dir, logo_path))
+            else:
+                # For other relative paths, assume they're relative to project root
+                logo_path = f"../{config.logo_path}"
+                template_dir = os.path.dirname(template_path)
+                adjusted_path_exists = os.path.exists(os.path.join(template_dir, logo_path))
+        
         report_data = {
             "title": config.title,
             "subtitle": config.subtitle,
             "author": config.author,
             "company": config.company,
-            "logo_path": config.logo_path if os.path.exists(str(config.logo_path or '')) else "",
+            "logo_path": logo_path,
             "date": datetime.now().strftime('%B %d, %Y'),
             "sections": sections
         }
-        
-        template_path = "templates/template_0.typ"
         
         # Adjust chart paths to be relative to the template directory
         for section in sections:

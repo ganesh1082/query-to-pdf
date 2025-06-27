@@ -32,129 +32,111 @@
 )
 
 // Configure the page layout and text defaults.
-#set page(
-  paper: "a4",
-  margin: (top: 2.5cm, bottom: 2.5cm, x: 2cm),
-  fill: colors.background,
-)
-#set text(font: fonts.body, size: 10.5pt, fill: colors.secondary)
+#set page(paper: "a4", margin: (x: 2cm, y: 2.5cm), fill: colors.background)
+#set text(font: fonts.body, size: 11pt, lang: "en", fill: colors.secondary)
+#set par(leading: 0.65em, justify: true)
 
 // --- 3. STYLING RULES ---
 
 // Style for level-1 headings.
-#show heading.where(level: 1): it => {
-  v(1.5em, weak: true)
-  align(left)[
-    rect(width: 4cm, height: 1.5pt, fill: colors.accent)
-    v(0.4em)
-    text(size: 20pt, weight: "bold", fill: colors.primary)[#it]
-  ]
-  v(1em, weak: true)
+#show heading: it => {
+  set text(font: fonts.heading, weight: "bold", fill: colors.primary)
+  v(18pt, weak: true)
+  it
+  v(10pt, weak: true)
+  line(length: 100%, stroke: 0.5pt + colors.accent)
+  v(12pt, weak: true)
 }
-
-// Justify paragraphs
-#set par(justify: true)
+#set heading(numbering: "1.")
 
 // Style for hyperlinks.
 #show link: set text(fill: colors.accent.darken(10%))
 
-// --- 4. REUSABLE COMPONENTS ---
+// --- 4. PAGE HEADER AND FOOTER ---
 
-// Custom page header.
-#let header(title) = align(right)[
-  text(size: 9pt, weight: "medium", fill: colors.secondary)[#title.replace("_", " ")]
-]
+#set page(
+  header: align(right)[
+    #text(9pt, fill: colors.secondary)[#data.company]
+  ],
+  footer: context align(center)[
+    #text(9pt, fill: colors.secondary)[
+      Page #context counter(page).display()
+    ]
+  ]
+)
 
-// Custom page footer with company name and page number.
-#let footer(company) = {
-  line(length: 100%, stroke: 0.5pt + colors.accent)
-  v(0.5em)
-  grid(
-    columns: (auto, 1fr),
-    text(size: 9pt, weight: "bold", fill: colors.primary)[#company],
-    align(right, text(size: 9pt, fill: colors.secondary)[Page #context counter(page).display()])
-  )
-}
+// --- 5. COVER PAGE FUNCTION ---
 
-// Cover Page Layout.
-#let cover-page(title, subtitle, author, company, date, logo_path) = {
-  set page(header: none, footer: none, margin: (x: 0cm, y: 0cm))
-  
-  rect(width: 100%, height: 100%, fill: colors.background)
-  place(left, rect(width: 6cm, height: 100%, fill: colors.primary))
-  
-  align(left + top, pad(left: 8cm, top: 4cm, right: 2cm)[
-    if logo_path != none and logo_path != "" and logo_path != "none" and file.exists(logo_path) {
-      image(logo_path, width: 4cm)
-      v(2em)
+#let cover_page(title, subtitle, author, company, date, logo_path) = {
+  align(center)[
+    v(3cm, weak: true)
+    
+    // Display logo if available - separated from other elements
+    if logo_path != none and logo_path != "" and logo_path != "none" {
+      align(center)[
+        [#image(logo_path, width: 3cm)]
+      ]
+      v(3cm, weak: true)
     }
     
-    text(font: fonts.heading, size: 32pt, weight: "bold", fill: colors.primary)[
-      #title.replace("_", " ")
-    ]
-    v(1em)
-    
+    text(font: fonts.heading, weight: "bold", size: 28pt, fill: colors.primary)[#title.replace("_", " ")]
+    v(0.5cm, weak: true)
     text(font: fonts.body, size: 16pt, fill: colors.secondary)[#subtitle]
-    v(2fr)
     
-    text(size: 11pt, fill: colors.primary)
-    line(length: 100%, stroke: 0.5pt + colors.accent)
-    v(1em)
-    table(
-      columns: (auto, auto),
-      column-gutter: 2cm,
-      align: left,
-      [*Author:*], [#author],
-      [*Organization:*], [#company],
-      [*Date:*], [#date],
-    )
-  ])
+    v(1fr)
+  ]
+    
+  line(length: 100%, stroke: 1pt + colors.accent)
+  v(0.5cm)
+    
+  grid(
+    columns: (1fr, 1fr),
+    gutter: 20pt,
+    align: (left, left),
+    text(11pt, [
+      #strong[Author:] #author \
+      #strong[Organization:] #company
+    ]),
+    text(11pt, [
+      #strong[Publication Date:] #date
+    ]),
+  )
   pagebreak()
 }
 
-// --- 5. DOCUMENT BODY ---
+// --- 6. DOCUMENT BODY ---
 
-// Generate the Cover Page first (without header/footer).
-#cover-page(
+// Generate cover page
+#cover_page(
   data.title,
   data.subtitle,
   data.author,
   data.company,
   data.date,
-  data.logo_path,
+  data.logo_path
 )
 
-// Apply header and footer to all pages after the cover.
-#set page(
-  header: header(data.title),
-  footer: footer(data.company)
-)
-
-// Generate the Table of Contents.
+// Table of contents
 #outline(
-  title: text(24pt, font: fonts.heading, weight: "bold", fill: colors.primary, "Contents"),
+  title: text(24pt,   colors.primary, "Table of Contents"),
   depth: 1,
   indent: 2em
 )
 #pagebreak()
 
-// Loop through sections and generate content pages.
+// Generate sections from data
 #for section in data.sections {
   heading(section.title)
-  
-  raw(section.content)
+
+  // Display the content as text
+  text(section.content)
   
   if "chart_path" in section and section.chart_path != none and section.chart_path != "" {
-    v(1.5em)
-    figure(
-      align(center, image(section.chart_path, width: 85%)),
-      caption: [
-        #strong[Figure #context counter(figure).display():] #section.title
-      ],
-      kind: "chart",
-      supplement: [Chart]
-    )
     v(1em)
+    figure(
+      image(section.chart_path, width: 90%),
+      caption: [Visualization for: #section.title]
+    )
   }
   
   pagebreak()

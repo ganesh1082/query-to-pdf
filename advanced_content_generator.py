@@ -51,7 +51,7 @@ class AdvancedContentGenerator:
         1. "title": A relevant, insightful title for the section.
         2. "content": A detailed, well-structured narrative (250-400 words), using Typst-friendly markdown: **bold** for subheadings and `-` for bullet points. The narrative MUST explain the data in 'chart_data'.
         3. "chart_type": The best chart for this section. Use a diverse mix of "bar", "line", "pie", "donut", "scatter", "horizontalBar", or "none".
-        4. "chart_data": A JSON object with plausible, realistic data. Use a simple `labels` and `values` structure. For scatter plots, use a list of dicts with 'x', 'y', and 'name'.
+        4. "chart_data": A JSON object with plausible, realistic data. Use the exact formats specified below.
 
         The first section MUST be an "Executive Summary" (chart_type: "none").
         The final sections MUST include "Strategic Recommendations" and "Risk Assessment" (chart_type: "none").
@@ -59,9 +59,12 @@ class AdvancedContentGenerator:
 
         OUTPUT ONLY THE COMPLETE JSON OBJECT, WRAPPED IN ```json ... ```.
 
-        Example chart_data formats:
-        - For bar/line/pie/donut: {{"labels": ["A", "B", "C"], "values": [10, 20, 30]}}
+        CRITICAL: Use these EXACT chart_data formats:
+        - For bar/line/pie/donut (single series): {{"labels": ["A", "B", "C"], "values": [10, 20, 30]}}
+        - For multi-series line charts: {{"labels": ["2020", "2021", "2022"], "series": [{{"name": "Series1", "values": [10, 15, 20]}}, {{"name": "Series2", "values": [5, 12, 18]}}]}}
         - For scatter: {{"points": [{{"x": 1, "y": 2, "name": "P1"}}, {{"x": 3, "y": 4, "name": "P2"}}]}}
+        
+        IMPORTANT: For line charts, if you want multiple series, use the "series" array format. If single series, use "labels" and "values".
         """
         
         try:
