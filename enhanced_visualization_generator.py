@@ -13,9 +13,150 @@ class PremiumVisualizationGenerator:
     
     def __init__(self, brand_colors: Dict[str, str]):
         self.primary_color = brand_colors.get("primary", "#0D203D")
+        self.secondary_color = brand_colors.get("secondary", "#666666")
+        self.accent_color = brand_colors.get("accent", "#4A90E2")
+        self.background_color = brand_colors.get("background", "#F7FAFC")
+        
+        # Create a custom color palette based on template colors
+        self.custom_palette = [
+            self.primary_color,
+            self.accent_color,
+            self.secondary_color,
+            self._adjust_color_brightness(self.primary_color, 0.7),
+            self._adjust_color_brightness(self.accent_color, 0.7),
+            self._adjust_color_brightness(self.secondary_color, 0.7),
+        ]
+        
         plt.style.use('seaborn-v0_8-whitegrid')
         self.temp_dir = "temp_charts"
         os.makedirs(self.temp_dir, exist_ok=True)
+
+    def _adjust_color_brightness(self, hex_color: str, factor: float) -> str:
+        """Adjust the brightness of a hex color by a factor."""
+        try:
+            # Remove # if present
+            hex_color = hex_color.lstrip('#')
+            
+            # Convert to RGB
+            r = int(hex_color[0:2], 16)
+            g = int(hex_color[2:4], 16)
+            b = int(hex_color[4:6], 16)
+            
+            # Adjust brightness
+            r = min(255, int(r * factor))
+            g = min(255, int(g * factor))
+            b = min(255, int(b * factor))
+            
+            # Convert back to hex
+            return f"#{r:02x}{g:02x}{b:02x}"
+        except:
+            return hex_color
+
+    def _get_template_palette(self, num_colors: int) -> list:
+        """Get a color palette based on template colors with gradient shades."""
+        print(f"  🎨 Debug - Generating palette for {num_colors} colors")
+        
+        # Start with base colors
+        base_colors = [self.primary_color, self.accent_color, self.secondary_color]
+        extended_palette = base_colors.copy()
+        
+        print(f"  🎨 Debug - Base colors: {base_colors}")
+        
+        # Generate a comprehensive palette with unique colors
+        color_variations = []
+        
+        # Brightness variations
+        for color in base_colors:
+            color_variations.extend([
+                self._adjust_color_brightness(color, 1.3),  # Lighter
+                self._adjust_color_brightness(color, 1.6),  # Much lighter
+                self._adjust_color_brightness(color, 0.7),  # Darker
+                self._adjust_color_brightness(color, 0.4),  # Much darker
+            ])
+        
+        # Hue variations (complementary and analogous)
+        for color in base_colors:
+            color_variations.extend([
+                self._shift_color_hue(color, 30),   # Analogous
+                self._shift_color_hue(color, 60),   # Triadic
+                self._shift_color_hue(color, 120),  # Split complementary
+                self._shift_color_hue(color, 180),  # Complementary
+            ])
+        
+        # Saturation variations
+        for color in base_colors:
+            color_variations.extend([
+                self._desaturate_color(color, 0.8),  # Slightly desaturated
+                self._desaturate_color(color, 0.6),  # More desaturated
+                self._desaturate_color(color, 0.4),  # Very desaturated
+            ])
+        
+        # Remove duplicates while preserving order
+        unique_colors = []
+        seen_colors = set()
+        for color in base_colors + color_variations:
+            if color not in seen_colors:
+                unique_colors.append(color)
+                seen_colors.add(color)
+        
+        # Take the required number of colors
+        final_palette = unique_colors[:num_colors]
+        
+        print(f"  🎨 Debug - Generated {len(final_palette)} unique colors: {final_palette}")
+        
+        return final_palette
+
+    def _shift_color_hue(self, hex_color: str, shift_degrees: int) -> str:
+        """Shift the hue of a hex color by the specified degrees."""
+        try:
+            import colorsys
+            # Remove # if present
+            hex_color = hex_color.lstrip('#')
+            
+            # Convert to RGB
+            r = int(hex_color[0:2], 16) / 255.0
+            g = int(hex_color[2:4], 16) / 255.0
+            b = int(hex_color[4:6], 16) / 255.0
+            
+            # Convert to HSV
+            h, s, v = colorsys.rgb_to_hsv(r, g, b)
+            
+            # Shift hue
+            h = (h + shift_degrees / 360.0) % 1.0
+            
+            # Convert back to RGB
+            r, g, b = colorsys.hsv_to_rgb(h, s, v)
+            
+            # Convert to hex
+            return f"#{int(r*255):02x}{int(g*255):02x}{int(b*255):02x}"
+        except:
+            return hex_color
+
+    def _desaturate_color(self, hex_color: str, saturation_factor: float) -> str:
+        """Desaturate a hex color by the specified factor."""
+        try:
+            import colorsys
+            # Remove # if present
+            hex_color = hex_color.lstrip('#')
+            
+            # Convert to RGB
+            r = int(hex_color[0:2], 16) / 255.0
+            g = int(hex_color[2:4], 16) / 255.0
+            b = int(hex_color[4:6], 16) / 255.0
+            
+            # Convert to HSV
+            h, s, v = colorsys.rgb_to_hsv(r, g, b)
+            
+            # Desaturate
+            s = s * saturation_factor
+            
+            # Convert back to RGB
+            r, g, b = colorsys.hsv_to_rgb(h, s, v)
+            
+            # Convert to hex
+            return f"#{int(r*255):02x}{int(g*255):02x}{int(b*255):02x}"
+        except:
+            return hex_color
 
     def _save_plot_to_file(self, fig, filename: str) -> str:
         """Saves the Matplotlib figure to a file and returns the path."""
@@ -110,14 +251,38 @@ class PremiumVisualizationGenerator:
         orient = 'h' if chart_type == "horizontalBar" else 'v'
         
         try:
-            sns.barplot(x=clean_values if orient == 'h' else clean_labels, 
-                       y=clean_labels if orient == 'h' else clean_values, 
-                       ax=ax, palette=palette, orient=orient)
+            # Use template-specific colors instead of seaborn palette
+            template_colors = self._get_template_palette(len(clean_labels))
+            print(f"  🎨 Debug - Bar chart using colors: {template_colors}")
+            
+            if orient == 'h':
+                bars = ax.barh(clean_labels, clean_values, color=template_colors)
+            else:
+                bars = ax.bar(clean_labels, clean_values, color=template_colors)
+            
+            # Add value labels on bars
+            for i, bar in enumerate(bars):
+                height = bar.get_height() if orient == 'v' else bar.get_width()
+                ax.text(bar.get_x() + bar.get_width()/2. if orient == 'v' else height + max(clean_values)*0.01,
+                       bar.get_y() + bar.get_height()/2. if orient == 'v' else bar.get_y() + bar.get_height()/2.,
+                       f'{height:.1f}',
+                       ha='center', va='center', fontweight='bold', fontsize=10, color='white')
+            
         except Exception as e:
             print(f"  ⚠️ Error creating bar chart for '{title}': {e}")
             return self._create_placeholder_chart(f"Chart creation failed for {title}")
         
-        ax.set_title(title, fontsize=14, fontweight='bold')
+        ax.set_title(title, fontsize=14, fontweight='bold', color=self.primary_color)
+        ax.set_xlabel('Values' if orient == 'v' else '', color=self.secondary_color)
+        ax.set_ylabel('Categories' if orient == 'v' else 'Values', color=self.secondary_color)
+        
+        # Style the chart with template colors
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+        ax.spines['left'].set_color(self.secondary_color)
+        ax.spines['bottom'].set_color(self.secondary_color)
+        ax.tick_params(colors=self.secondary_color)
+        
         plt.tight_layout()
         return self._save_plot_to_file(fig, f"bar_{safe_title}")
 
@@ -139,21 +304,32 @@ class PremiumVisualizationGenerator:
             fig.patch.set_alpha(0.0)
             ax.patch.set_alpha(0.0)
             
-            colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b']
+            # Use template-specific colors
+            template_colors = self._get_template_palette(len(series))
+            print(f"  🎨 Debug - Multi-series line chart using colors: {template_colors}")
             
             for i, series_obj in enumerate(series):
                 if isinstance(series_obj, dict) and 'name' in series_obj and 'values' in series_obj:
                     series_name = series_obj['name']
                     series_values = series_obj['values']
                     if len(series_values) == len(labels):
-                        color = colors[i % len(colors)]
+                        color = template_colors[i % len(template_colors)]
+                        print(f"  🎨 Debug - Series '{series_name}' using color: {color}")
                         ax.plot(labels, series_values, marker='o', color=color, lw=2, label=series_name)
                         if chart_type == "area":
                             ax.fill_between(labels, series_values, alpha=0.2, color=color)
             
-            ax.set_title(title, fontsize=14, fontweight='bold')
-            ax.legend()
-            ax.tick_params(axis='x', rotation=25)
+            ax.set_title(title, fontsize=14, fontweight='bold', color=self.primary_color)
+            ax.legend(frameon=False)
+            ax.tick_params(axis='x', rotation=25, colors=self.secondary_color)
+            ax.tick_params(axis='y', colors=self.secondary_color)
+            
+            # Style the chart with template colors
+            ax.spines['top'].set_visible(False)
+            ax.spines['right'].set_visible(False)
+            ax.spines['left'].set_color(self.secondary_color)
+            ax.spines['bottom'].set_color(self.secondary_color)
+            
             plt.tight_layout()
             return self._save_plot_to_file(fig, f"{chart_type}_{safe_title}")
         
@@ -165,21 +341,30 @@ class PremiumVisualizationGenerator:
             fig.patch.set_alpha(0.0)
             ax.patch.set_alpha(0.0)
             
-            colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b']
+            # Use template-specific colors
+            template_colors = self._get_template_palette(len(values))
             
             # Use legend if available, otherwise use series, otherwise generate default names
             series_names = legend if legend else (series if series else [f"Series {i+1}" for i in range(len(values))])
             
             for i, (series_name, series_values) in enumerate(zip(series_names, values)):
                 if len(series_values) == len(labels):
-                    color = colors[i % len(colors)]
+                    color = template_colors[i % len(template_colors)]
                     ax.plot(labels, series_values, marker='o', color=color, lw=2, label=series_name)
                     if chart_type == "area":
                         ax.fill_between(labels, series_values, alpha=0.2, color=color)
             
-            ax.set_title(title, fontsize=14, fontweight='bold')
-            ax.legend()
-            ax.tick_params(axis='x', rotation=25)
+            ax.set_title(title, fontsize=14, fontweight='bold', color=self.primary_color)
+            ax.legend(frameon=False)
+            ax.tick_params(axis='x', rotation=25, colors=self.secondary_color)
+            ax.tick_params(axis='y', colors=self.secondary_color)
+            
+            # Style the chart with template colors
+            ax.spines['top'].set_visible(False)
+            ax.spines['right'].set_visible(False)
+            ax.spines['left'].set_color(self.secondary_color)
+            ax.spines['bottom'].set_color(self.secondary_color)
+            
             plt.tight_layout()
             return self._save_plot_to_file(fig, f"{chart_type}_{safe_title}")
         
@@ -216,8 +401,16 @@ class PremiumVisualizationGenerator:
         ax.plot(clean_labels, clean_values, marker='o', color=self.primary_color, lw=2)
         if chart_type == "area":
             ax.fill_between(clean_labels, clean_values, alpha=0.2, color=self.primary_color)
-        ax.set_title(title, fontsize=14, fontweight='bold')
-        ax.tick_params(axis='x', rotation=25)
+        ax.set_title(title, fontsize=14, fontweight='bold', color=self.primary_color)
+        ax.tick_params(axis='x', rotation=25, colors=self.secondary_color)
+        ax.tick_params(axis='y', colors=self.secondary_color)
+        
+        # Style the chart with template colors
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+        ax.spines['left'].set_color(self.secondary_color)
+        ax.spines['bottom'].set_color(self.secondary_color)
+        
         plt.tight_layout()
         return self._save_plot_to_file(fig, f"{chart_type}_{safe_title}")
 
@@ -225,17 +418,38 @@ class PremiumVisualizationGenerator:
         labels, values = data.get("labels", []), data.get("values", [])
         if not all([labels, values]): return self._create_placeholder_chart(title)
         
-        fig, ax = plt.subplots(figsize=(4, 4))
+        # Use much smaller figure size for pie/donut charts
+        fig, ax = plt.subplots(figsize=(3, 2.5))
         # Set transparent background
         fig.patch.set_alpha(0.0)
         ax.patch.set_alpha(0.0)
         
         wedgeprops = {"width": 0.4, "edgecolor": "w"} if chart_type == "donut" else {}
-        colors = list(sns.color_palette(palette, len(labels)))  # type: ignore
+        
+        # Use template-specific colors instead of seaborn palette
+        template_colors = self._get_template_palette(len(labels))
+        print(f"  🎨 Debug - Pie chart using colors: {template_colors}")
+        
         pctdistance = 0.80 if chart_type == "donut" else 0.6
-        ax.pie(values, labels=labels, autopct='%1.1f%%', startangle=90, colors=colors, wedgeprops=wedgeprops, pctdistance=pctdistance)
-        ax.set_title(title, fontsize=14, fontweight='bold')
+        
+        # Create a function to format percentage with smaller font
+        def make_autopct(values):
+            def my_autopct(pct):
+                total = sum(values)
+                val = int(round(pct*total/100.0))
+                return f'{pct:.1f}%' if pct > 5 else ''
+            return my_autopct
+        
+        # Use smaller font sizes for labels and percentages
+        ax.pie(values, labels=labels, autopct=make_autopct(values), startangle=90, 
+               colors=template_colors, wedgeprops=wedgeprops, pctdistance=pctdistance,
+               textprops={'fontsize': 6, 'color': self.secondary_color})  # Even smaller font for compact charts
+        
+        ax.set_title(title, fontsize=8, fontweight='bold', color=self.primary_color)  # Smaller title font
         ax.axis('equal')
+        
+        # Adjust layout to prevent text cutoff
+        plt.tight_layout()
         return self._save_plot_to_file(fig, f"{chart_type}_{safe_title}")
 
     def _create_scatter_plot(self, data, title, palette, safe_title):
@@ -247,12 +461,26 @@ class PremiumVisualizationGenerator:
         fig.patch.set_alpha(0.0)
         ax.patch.set_alpha(0.0)
         
-        colors = list(sns.color_palette(palette, len(points)))  # type: ignore
+        # Use template-specific colors instead of seaborn palette
+        template_colors = self._get_template_palette(len(points))
+        print(f"  🎨 Debug - Scatter plot using colors: {template_colors}")
+        
         for i, p in enumerate(points):
-            ax.scatter(p['x'], p['y'], s=p.get('size', 150), alpha=0.7, label=p.get('name'), color=colors[i])
+            color = template_colors[i % len(template_colors)]
+            print(f"  🎨 Debug - Point '{p.get('name', f'Point {i}')}' using color: {color}")
+            ax.scatter(p['x'], p['y'], s=p.get('size', 150), alpha=0.7, label=p.get('name'), color=color)
             if p.get('name'):
-                ax.text(p['x'], p['y'], f" {p['name']}", fontsize=9)
-        ax.set_title(title, fontweight='bold')
-        ax.legend()
-        ax.grid(True)
+                ax.text(p['x'], p['y'], f" {p['name']}", fontsize=9, color=self.secondary_color)
+        
+        ax.set_title(title, fontweight='bold', color=self.primary_color)
+        ax.legend(frameon=False)
+        ax.grid(True, alpha=0.3, color=self.secondary_color)
+        
+        # Style the chart with template colors
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+        ax.spines['left'].set_color(self.secondary_color)
+        ax.spines['bottom'].set_color(self.secondary_color)
+        ax.tick_params(colors=self.secondary_color)
+        
         return self._save_plot_to_file(fig, f"scatter_{safe_title}")

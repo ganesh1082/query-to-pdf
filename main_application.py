@@ -18,7 +18,33 @@ class ProfessionalReportGenerator:
 
     def __init__(self, gemini_api_key: Optional[str]):
         self.content_generator = AdvancedContentGenerator(api_key=gemini_api_key)
+        # Initialize with default colors, will be updated based on template
         self.data_visualizer = PremiumVisualizationGenerator(brand_colors={"primary": "#0D203D", "accent": "#4A90E2"})
+
+    def _get_template_colors(self, template: str) -> Dict[str, str]:
+        """Extract color palette from the specified template."""
+        template_colors = {
+            "template_0": {
+                "primary": "#0D203D",    # rgb(13, 32, 61) - Deep navy blue
+                "secondary": "#2D3748",  # rgb(45, 55, 72) - Dark gray
+                "accent": "#4A90E2",     # rgb(74, 144, 226) - Blue accent
+                "background": "#F7FAFC"  # Light background
+            },
+            "template_1": {
+                "primary": "#1A2B42",    # Deep navy blue
+                "secondary": "#4A5568",  # Medium gray
+                "accent": "#D69E2E",     # Golden-amber
+                "background": "#F7FAFC"  # Very light gray
+            },
+            "template_2": {
+                "primary": "#AF3029",    # Deep red
+                "secondary": "#25241C",  # Dark charcoal
+                "accent": "#AF3029",     # Deep red (same as primary)
+                "background": "#FFFCF0"  # Warm off-white
+            }
+        }
+        
+        return template_colors.get(template, template_colors["template_1"])
 
     def _convert_content_to_typst(self, content: str) -> str:
         """Converts custom markdown to Typst syntax."""
@@ -33,12 +59,16 @@ class ProfessionalReportGenerator:
         
         return content
 
-    async def generate_comprehensive_report(self, config: ReportConfig, query: str, page_count: int) -> str:
+    async def generate_comprehensive_report(self, config: ReportConfig, query: str, page_count: int, template: str = "template_1") -> str:
         
         print("\n🤖 Phase 1: AI is designing the full report blueprint...")
         report_blueprint = await self.content_generator.generate_full_report_blueprint(query, page_count)
         if not report_blueprint or "sections" not in report_blueprint:
             raise ValueError("AI failed to generate a valid report blueprint.")
+        
+        # Get template-specific colors and update the visualizer
+        template_colors = self._get_template_colors(template)
+        self.data_visualizer = PremiumVisualizationGenerator(brand_colors=template_colors)
         
         print("\n📊 Phase 2: Creating dynamic data visualizations...")
         for section in report_blueprint.get("sections", []):
@@ -55,11 +85,11 @@ class ProfessionalReportGenerator:
                 section["chart_path"] = ""
         
         print("\n🚀 Phase 3: Compiling the final PDF report with Typst...")
-        output_filename = self._export_to_pdf(config, report_blueprint)
+        output_filename = self._export_to_pdf(config, report_blueprint, template)
         
         return output_filename
 
-    def _export_to_pdf(self, config: ReportConfig, blueprint: Dict[str, Any]) -> str:
+    def _export_to_pdf(self, config: ReportConfig, blueprint: Dict[str, Any], template: str = "template_1") -> str:
         """Assembles data and calls the Typst renderer."""
         sanitized_title = re.sub(r'[\\/*?:"<>|]', "", config.title)
         filename = f"./generated_reports/{sanitized_title[:50]}.pdf"
@@ -67,7 +97,7 @@ class ProfessionalReportGenerator:
         # Prepare the data dictionary for Typst
         sections = blueprint.get("sections", []) or []
         
-        template_path = "templates/template_1.typ"
+        template_path = f"templates/{template}.typ"
         
         # Adjust logo path to be relative to the template directory
         logo_path = ""
@@ -109,8 +139,8 @@ class ProfessionalReportGenerator:
             if isinstance(section, dict):
                 chart_path = section.get("chart_path")
                 if chart_path and isinstance(chart_path, str) and chart_path != "":
-                    # Convert chart path to be relative to the template directory
-                    # If chart_path is "temp_charts/filename.png", make it "../temp_charts/filename.png"
+                    print(f"  🔍 Debug - Original chart path: {chart_path}")
+                    # Convert chart path to be relative to the template directory (like template 1)
                     if chart_path.startswith("temp_charts/"):
                         section["chart_path"] = f"../{chart_path}"
                     elif os.path.isabs(chart_path):
@@ -118,6 +148,13 @@ class ProfessionalReportGenerator:
                         template_dir = os.path.dirname(template_path)
                         rel_path = os.path.relpath(chart_path, template_dir)
                         section["chart_path"] = rel_path
+                    
+                    print(f"  🔍 Debug - Adjusted chart path: {section['chart_path']}")
+                    # Check if the file actually exists
+                    template_dir = os.path.dirname(template_path)
+                    full_path = os.path.join(template_dir, section["chart_path"])
+                    print(f"  🔍 Debug - Full path: {full_path}")
+                    print(f"  🔍 Debug - File exists: {os.path.exists(full_path)}")
         
         success = render_to_pdf_with_typst(report_data, template_path, filename)
         

@@ -1,26 +1,24 @@
-// A modern and clean Typst template for professional reports.
+// A modern 2-column Typst template for professional reports.
 
 // Data import from the JSON file created by the Python script.
 #let data = json("report_data.json")
 
 // --- 1. CONFIGURATION ---
 
-// Define a professional color palette.
+// Define a professional color palette with the specified colors.
 #let colors = (
-  primary: rgb("#1A2B42"),    // Deep navy blue for text and major headings.
-  secondary: rgb("#4A5568"),  // Medium gray for subtitles and body text.
-  accent: rgb("#D69E2E"),     // Golden-amber for accents, lines, and highlights.
-  background: rgb("#F7FAFC"), // A very light gray for the page background.
+  primary: rgb("#AF3029"),    // Deep red for headings and accents.
+  secondary: rgb("#25241C"),  // Dark charcoal for body text.
+  accent: rgb("#AF3029"),     // Deep red for accents (same as primary).
+  background: rgb("#FFFCF0"), // Warm off-white for page background.
   white: rgb("#FFFFFF"),
 )
 
-// Define a font scheme for a clean, modern look.
-// Typst can automatically fetch Google Fonts.
-// For custom fonts, place .ttf/.otf files in your project and use:
-// body: font("fonts/MyCustomFont.ttf")
+// Define a font scheme with IBM Plex Mono for titles and Trebuchet MS for body.
+// Using system fonts that are more likely to be available
 #let fonts = (
-  body: "Helvetica",
-  heading: "Helvetica",
+  body: "Arial",
+  heading: "Courier New",
 )
 
 // --- 2. DOCUMENT SETUP ---
@@ -44,13 +42,13 @@
   v(18pt, weak: true)
   it
   v(10pt, weak: true)
-  line(length: 100%, stroke: 0.5pt + colors.accent)
+  line(length: 100%, stroke: 0.5pt + colors.primary)
   v(12pt, weak: true)
 }
 #set heading(numbering: "1.")
 
 // Style for hyperlinks.
-#show link: set text(fill: colors.accent.darken(10%))
+#show link: set text(fill: colors.primary.darken(10%))
 
 // --- 4. PAGE HEADER AND FOOTER ---
 
@@ -99,7 +97,38 @@
   pagebreak()
 }
 
-// --- 6. DOCUMENT BODY ---
+// --- 6. TWO-COLUMN LAYOUT FUNCTION ---
+
+#let two_column_section(title, content, chart_path) = {
+  heading(title)
+  
+  // Two-column text layout with proper text flow
+  grid(
+    columns: (1fr, 1fr),
+    gutter: 20pt,
+    align: (left, left),
+    [
+      // Content flows naturally from left to right column
+      #raw(content)
+    ],
+    [
+      // Empty right column - content will flow here automatically
+    ]
+  )
+  
+  // Chart/visuals area (only if chart exists)
+  if chart_path != "" {
+    v(1em, weak: true)
+    figure(
+      image(chart_path, width: 60%),
+      caption: [Visualization for: #title]
+    )
+  }
+  
+  pagebreak()
+}
+
+// --- 7. DOCUMENT BODY ---
 
 // Generate cover page
 #cover_page(
@@ -113,26 +142,21 @@
 
 // Table of contents
 #outline(
-  title: text(24pt,   colors.primary, "Table of Contents"),
+  title: text(24pt, colors.primary, "Table of Contents"),
   depth: 1,
   indent: 2em
 )
 #pagebreak()
 
-// Generate sections from data
+// Generate sections from data with 2-column layout
 #for section in data.sections {
-  heading(section.title)
-
-  // Display the content as text
-  text(section.content)
-  
-  if "chart_path" in section and section.chart_path != none and section.chart_path != "" {
-    v(1em)
-    figure(
-      image(section.chart_path, width: 90%),
-      caption: "Visualization for: " + section.title
-    )
-  }
-  
-  pagebreak()
-}
+  two_column_section(
+    section.title,
+    section.content,
+    if "chart_path" in section and section.chart_path != none and section.chart_path != "" {
+      section.chart_path
+    } else {
+      ""
+    }
+  )
+} 

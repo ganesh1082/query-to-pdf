@@ -36,12 +36,20 @@ async def main():
         default=12,
         help="The approximate target number of pages for the report."
     )
+    parser.add_argument(
+        "--template",
+        type=str,
+        default="template_1",
+        choices=["template_1", "template_2"],
+        help="The template to use for the report layout (template_1: single column, template_2: two column)."
+    )
     args = parser.parse_args()
     
     print("🚀 AI-Powered Report Generator v2.1 (Typst Edition)")
     print("======================================================")
     print(f"  Prompt: {args.prompt}")
     print(f"  Target Pages: ~{args.pages}")
+    print(f"  Template: {args.template}")
     print("======================================================")
     
     gemini_api_key = os.getenv("GEMINI_API_KEY")
@@ -65,7 +73,7 @@ async def main():
     
     try:
         generator = ProfessionalReportGenerator(gemini_api_key=gemini_api_key)
-        output_file = await generator.generate_comprehensive_report(config, args.prompt, args.pages)
+        output_file = await generator.generate_comprehensive_report(config, args.prompt, args.pages, args.template)
         
         print("\n" + "=" * 54)
         print("🎉 SUCCESS! Professional PDF report generated successfully!")
