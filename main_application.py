@@ -142,7 +142,7 @@ class ProfessionalReportGenerator:
                     print(f"  🔍 Debug - Original chart path: {chart_path}")
                     # Convert chart path to be relative to the template directory (like template 1)
                     if chart_path.startswith("temp_charts/"):
-                        section["chart_path"] = f"../{chart_path}"
+                        section["chart_path"] = f"../{chart_path}"  # Go up one level from templates/ to find temp_charts/
                     elif os.path.isabs(chart_path):
                         # If it's an absolute path, make it relative to template directory
                         template_dir = os.path.dirname(template_path)

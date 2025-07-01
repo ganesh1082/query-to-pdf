@@ -120,7 +120,14 @@ OUTPUT FORMAT:
             print(f"  🔍 Error type: {type(e).__name__}")
             # Only try to access response.text if response exists
             if 'response' in locals() and hasattr(response, 'text'):
-                print(f"  ⚠️ Raw AI response was:\n---\n{response.text[:500]}...\n---")
+                print(f"  ⚠️ Raw AI response was:\n---\n{response.text[:1000]}...\n---")
+                # Try to save the raw response for debugging
+                try:
+                    with open("debug_ai_response.txt", "w", encoding="utf-8") as f:
+                        f.write(response.text)
+                    print("  📝 Saved raw AI response to debug_ai_response.txt for analysis")
+                except Exception as save_error:
+                    print(f"  ⚠️ Could not save debug file: {save_error}")
             else:
                 print("  ⚠️ No response object available")
             return self._get_mock_report_blueprint(query)
@@ -137,6 +144,9 @@ OUTPUT FORMAT:
         # Fix common issues
         repaired = json_str
         
+        # Fix missing quotes around property names (most common issue)
+        repaired = re.sub(r'(\s*)(\w+)(\s*):', r'\1"\2"\3:', repaired)
+        
         # Fix missing commas between objects in arrays
         repaired = re.sub(r'}\s*{', '},{', repaired)
         
@@ -147,11 +157,16 @@ OUTPUT FORMAT:
         repaired = re.sub(r',\s*}', '}', repaired)
         repaired = re.sub(r',\s*]', ']', repaired)
         
-        # Fix missing quotes around property names
-        repaired = re.sub(r'(\w+):', r'"\1":', repaired)
-        
         # Fix unescaped quotes in content
         repaired = re.sub(r'(?<!\\)"(?=.*":)', r'\\"', repaired)
+        
+        # Fix newlines and special characters in content
+        repaired = re.sub(r'\n', '\\n', repaired)
+        repaired = re.sub(r'\r', '\\r', repaired)
+        repaired = re.sub(r'\t', '\\t', repaired)
+        
+        # Remove any control characters that might cause issues
+        repaired = re.sub(r'[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]', '', repaired)
         
         return repaired
 
@@ -273,37 +288,37 @@ OUTPUT FORMAT:
         if "google" in query_lower or "alphabet" in query_lower:
             return {
                 "sections": [
-                    {"title": "Executive Summary", "content": "**Overview:** This report provides a comprehensive analysis of Google (Alphabet Inc.), one of the world's leading technology companies. Founded in 1998, Google has evolved from a search engine to a global technology conglomerate with diverse business interests.", "chart_type": "none", "chart_data": {}},
-                    {"title": "Revenue Breakdown by Segment", "content": "**Financial Analysis:** Google's revenue is primarily driven by advertising, with Google Search and YouTube being the major contributors. Google Cloud and other ventures represent growing segments of the business.", "chart_type": "pie", "chart_data": {"labels": ["Search Advertising", "Network Advertising", "Google Cloud", "Other"], "values": [55, 15, 15, 15]}},
-                    {"title": "Market Share in Digital Advertising", "content": "**Competitive Position:** Google dominates the digital advertising market alongside Meta, controlling a significant portion of global ad spend through its search and display networks.", "chart_type": "bar", "chart_data": {"labels": ["Google", "Meta", "Amazon", "Others"], "values": [28, 20, 11, 41]}},
-                    {"title": "Strategic Recommendations", "content": "**Future Outlook:** Google should continue investing in AI and cloud services while addressing regulatory challenges and maintaining its competitive edge in search and advertising.", "chart_type": "none", "chart_data": {}},
+                    {"title": "Executive Summary", "content": "**Overview:** This report provides a comprehensive analysis of Google (Alphabet Inc.), one of the world's leading technology companies. Founded in 1998, Google has evolved from a search engine to a global technology conglomerate with diverse business interests.", "chart_type": "none", "chart_data": {}, "chart_path": ""},
+                    {"title": "Revenue Breakdown by Segment", "content": "**Financial Analysis:** Google's revenue is primarily driven by advertising, with Google Search and YouTube being the major contributors. Google Cloud and other ventures represent growing segments of the business.", "chart_type": "pie", "chart_data": {"labels": ["Search Advertising", "Network Advertising", "Google Cloud", "Other"], "values": [55, 15, 15, 15]}, "chart_path": "temp_charts/pie_RevenueBreakdownbySegment.png"},
+                    {"title": "Market Share in Digital Advertising", "content": "**Competitive Position:** Google dominates the digital advertising market alongside Meta, controlling a significant portion of global ad spend through its search and display networks.", "chart_type": "bar", "chart_data": {"labels": ["Google", "Meta", "Amazon", "Others"], "values": [28, 20, 11, 41]}, "chart_path": "temp_charts/bar_MarketShareinDigitalAdvertisin.png"},
+                    {"title": "Strategic Recommendations", "content": "**Future Outlook:** Google should continue investing in AI and cloud services while addressing regulatory challenges and maintaining its competitive edge in search and advertising.", "chart_type": "none", "chart_data": {}, "chart_path": ""},
                 ]
             }
         elif "meta" in query_lower or "facebook" in query_lower:
             return {
                 "sections": [
-                    {"title": "Executive Summary", "content": "**Overview:** Meta Platforms Inc. is a global technology company focused on connecting people through social media platforms. The company has evolved from Facebook to include Instagram, WhatsApp, and metaverse initiatives.", "chart_type": "none", "chart_data": {}},
-                    {"title": "User Base by Platform", "content": "**Platform Analysis:** Meta's ecosystem includes multiple platforms with billions of users worldwide, creating a comprehensive social media network.", "chart_type": "pie", "chart_data": {"labels": ["Facebook", "Instagram", "WhatsApp", "Messenger"], "values": [35, 25, 25, 15]}},
-                    {"title": "Advertising Revenue Trends", "content": "**Financial Performance:** Meta's advertising revenue has shown strong growth, driven by targeted advertising capabilities and expanding user engagement.", "chart_type": "line", "chart_data": {"labels": ["2019", "2020", "2021", "2022", "2023"], "values": [70, 84, 115, 113, 132]}},
-                    {"title": "Strategic Recommendations", "content": "**Future Strategy:** Meta should focus on metaverse development, AI integration, and addressing privacy concerns while maintaining platform engagement.", "chart_type": "none", "chart_data": {}},
+                    {"title": "Executive Summary", "content": "**Overview:** Meta Platforms Inc. is a global technology company focused on connecting people through social media platforms. The company has evolved from Facebook to include Instagram, WhatsApp, and metaverse initiatives.", "chart_type": "none", "chart_data": {}, "chart_path": ""},
+                    {"title": "User Base by Platform", "content": "**Platform Analysis:** Meta's ecosystem includes multiple platforms with billions of users worldwide, creating a comprehensive social media network.", "chart_type": "pie", "chart_data": {"labels": ["Facebook", "Instagram", "WhatsApp", "Messenger"], "values": [35, 25, 25, 15]}, "chart_path": "temp_charts/pie_UserBasebyPlatform.png"},
+                    {"title": "Advertising Revenue Trends", "content": "**Financial Performance:** Meta's advertising revenue has shown strong growth, driven by targeted advertising capabilities and expanding user engagement.", "chart_type": "line", "chart_data": {"labels": ["2019", "2020", "2021", "2022", "2023"], "values": [70, 84, 115, 113, 132]}, "chart_path": "temp_charts/line_AdvertisingRevenueTrends.png"},
+                    {"title": "Strategic Recommendations", "content": "**Future Strategy:** Meta should focus on metaverse development, AI integration, and addressing privacy concerns while maintaining platform engagement.", "chart_type": "none", "chart_data": {}, "chart_path": ""},
                 ]
             }
         elif "apple" in query_lower:
             return {
                 "sections": [
-                    {"title": "Executive Summary", "content": "**Overview:** Apple Inc. is a global technology leader known for its innovative hardware, software, and services. The company has built a premium brand ecosystem with strong customer loyalty.", "chart_type": "none", "chart_data": {}},
-                    {"title": "Revenue by Product Category", "content": "**Product Analysis:** Apple's revenue is diversified across hardware, services, and accessories, with iPhone remaining the primary revenue driver.", "chart_type": "pie", "chart_data": {"labels": ["iPhone", "Mac", "iPad", "Services", "Other"], "values": [52, 10, 8, 20, 10]}},
-                    {"title": "Global Market Share", "content": "**Competitive Position:** Apple maintains a strong position in premium smartphone and computer markets, with significant market share in key regions.", "chart_type": "bar", "chart_data": {"labels": ["Smartphones", "Tablets", "Laptops", "Smartwatches"], "values": [18, 35, 8, 30]}},
-                    {"title": "Strategic Recommendations", "content": "**Growth Strategy:** Apple should continue innovating in services, expanding in emerging markets, and developing new product categories.", "chart_type": "none", "chart_data": {}},
+                    {"title": "Executive Summary", "content": "**Overview:** Apple Inc. is a global technology leader known for its innovative hardware, software, and services. The company has built a premium brand ecosystem with strong customer loyalty.", "chart_type": "none", "chart_data": {}, "chart_path": ""},
+                    {"title": "Revenue by Product Category", "content": "**Product Analysis:** Apple's revenue is diversified across hardware, services, and accessories, with iPhone remaining the primary revenue driver.", "chart_type": "pie", "chart_data": {"labels": ["iPhone", "Mac", "iPad", "Services", "Other"], "values": [52, 10, 8, 20, 10]}, "chart_path": "temp_charts/pie_RevenuebyProductCategory.png"},
+                    {"title": "Global Market Share", "content": "**Competitive Position:** Apple maintains a strong position in premium smartphone and computer markets, with significant market share in key regions.", "chart_type": "bar", "chart_data": {"labels": ["Smartphones", "Tablets", "Laptops", "Smartwatches"], "values": [18, 35, 8, 30]}, "chart_path": "temp_charts/bar_GlobalMarketShare.png"},
+                    {"title": "Strategic Recommendations", "content": "**Growth Strategy:** Apple should continue innovating in services, expanding in emerging markets, and developing new product categories.", "chart_type": "none", "chart_data": {}, "chart_path": ""},
                 ]
             }
         else:
             # Generic fallback for other topics
             return {
                 "sections": [
-                    {"title": "Executive Summary", "content": f"**Overview:** This report provides a comprehensive analysis of {query}. The analysis covers key aspects including market trends, competitive landscape, and strategic implications.", "chart_type": "none", "chart_data": {}},
-                    {"title": "Market Analysis", "content": "**Market Overview:** The market shows diverse trends with multiple players competing for market share. Understanding these dynamics is crucial for strategic decision-making.", "chart_type": "bar", "chart_data": {"labels": ["Segment A", "Segment B", "Segment C", "Segment D"], "values": [30, 25, 20, 25]}},
-                    {"title": "Trend Analysis", "content": "**Growth Trends:** Recent years have shown consistent growth patterns with some seasonal variations. Future projections indicate continued expansion.", "chart_type": "line", "chart_data": {"labels": ["2020", "2021", "2022", "2023", "2024"], "values": [100, 115, 130, 145, 160]}},
-                    {"title": "Strategic Recommendations", "content": "**Action Items:** Based on the analysis, key recommendations include market expansion, technology investment, and strategic partnerships.", "chart_type": "none", "chart_data": {}},
+                    {"title": "Executive Summary", "content": f"**Overview:** This report provides a comprehensive analysis of {query}. The analysis covers key aspects including market trends, competitive landscape, and strategic implications.", "chart_type": "none", "chart_data": {}, "chart_path": ""},
+                    {"title": "Market Analysis", "content": "**Market Overview:** The market shows diverse trends with multiple players competing for market share. Understanding these dynamics is crucial for strategic decision-making.", "chart_type": "bar", "chart_data": {"labels": ["Segment A", "Segment B", "Segment C", "Segment D"], "values": [30, 25, 20, 25]}, "chart_path": "temp_charts/bar_MarketAnalysis.png"},
+                    {"title": "Trend Analysis", "content": "**Growth Trends:** Recent years have shown consistent growth patterns with some seasonal variations. Future projections indicate continued expansion.", "chart_type": "line", "chart_data": {"labels": ["2020", "2021", "2022", "2023", "2024"], "values": [100, 115, 130, 145, 160]}, "chart_path": "temp_charts/line_TrendAnalysis.png"},
+                    {"title": "Strategic Recommendations", "content": "**Action Items:** Based on the analysis, key recommendations include market expansion, technology investment, and strategic partnerships.", "chart_type": "none", "chart_data": {}, "chart_path": ""},
                 ]
             }

@@ -99,33 +99,28 @@
 
 // --- 6. TWO-COLUMN LAYOUT FUNCTION ---
 
-#let two_column_section(title, content, chart_path) = {
+#let two_column_section(title, content, chart_path, is_last: false) = {
   heading(title)
-  
-  // Two-column text layout with proper text flow
-  grid(
-    columns: (1fr, 1fr),
-    gutter: 20pt,
-    align: (left, left),
-    [
-      // Content flows naturally from left to right column
-      #raw(content)
-    ],
-    [
-      // Empty right column - content will flow here automatically
-    ]
-  )
-  
-  // Chart/visuals area (only if chart exists)
-  if chart_path != "" {
-    v(1em, weak: true)
+
+  // First half: Two-column text layout (constrained to leave space for chart)
+  columns(2)[
+    #raw(content)
+  ]
+
+  // Second half: Chart/visuals area positioned at bottom of page
+  if chart_path != "" and chart_path != none {
+    // Push content to bottom of page
+    v(1fr, weak: true)
     figure(
       image(chart_path, width: 60%),
       caption: [Visualization for: #title]
     )
   }
-  
-  pagebreak()
+
+  // Only add page break if this is not the last section
+  if not is_last {
+    pagebreak()
+  }
 }
 
 // --- 7. DOCUMENT BODY ---
@@ -149,14 +144,15 @@
 #pagebreak()
 
 // Generate sections from data with 2-column layout
-#for section in data.sections {
+#for (i, section) in data.sections.enumerate() {
   two_column_section(
     section.title,
     section.content,
-    if "chart_path" in section and section.chart_path != none and section.chart_path != "" {
+    if "chart_path" in section {
       section.chart_path
     } else {
       ""
-    }
+    },
+    is_last: i == data.sections.len() - 1
   )
 } 

@@ -120,7 +120,7 @@
 #pagebreak()
 
 // Generate sections from data
-#for section in data.sections {
+#for (i, section) in data.sections.enumerate() {
   heading(section.title)
 
   // Display the content as text
@@ -134,5 +134,8 @@
     )
   }
   
-  pagebreak()
+  // Only add page break if this is not the last section
+  if i < data.sections.len() - 1 {
+    pagebreak()
+  }
 }
