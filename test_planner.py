@@ -42,9 +42,9 @@ async def test_planner():
         try:
             # Generate blueprint
             blueprint = await planner.generate_report_blueprint(
-                query=test_case["query"],
-                page_count=test_case["pages"],
-                report_type=test_case["type"]
+                query=test_case["query"],  # type: ignore
+                page_count=test_case["pages"],  # type: ignore
+                report_type=test_case["type"]  # type: ignore
             )
             
             if blueprint and "sections" in blueprint:

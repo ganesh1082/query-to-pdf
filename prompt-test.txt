@@ -1,4 +1,0 @@
-python index.py --prompt "select any random topic and use multi line chart use series and legends data as well"
-
-python index.py --prompt "about meta company and google company, also create difference between instagram and facebook"
-
