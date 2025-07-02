@@ -14,13 +14,11 @@
   white: rgb("#FFFFFF"),
 )
 
-// Define a font scheme for a clean, modern look.
-// Typst can automatically fetch Google Fonts.
-// For custom fonts, place .ttf/.otf files in your project and use:
-// body: font("fonts/MyCustomFont.ttf")
+// Define a font scheme with IBM Plex Mono for titles and Trebuchet MS for body.
+// Using system fonts with fallbacks for better availability
 #let fonts = (
-  body: "Helvetica",
-  heading: "Helvetica",
+  body: ("Trebuchet MS", "Arial", "Helvetica", "sans-serif"),
+  heading: ("IBM Plex Mono", "Courier New", "monospace"),
 )
 
 // --- 2. DOCUMENT SETUP ---

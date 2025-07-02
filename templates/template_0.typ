@@ -2,14 +2,20 @@
 
 #let data = json("report_data.json")
 
+// Define fonts
+#let fonts = (
+  body: ("Trebuchet MS", "Arial", "Helvetica", "sans-serif"),
+  heading: ("IBM Plex Mono", "Courier New", "monospace"),
+)
+
 // Document setup
 #set page(paper: "a4", margin: (x: 2cm, y: 2.5cm))
-#set text(font: "Helvetica", size: 11pt, lang: "en")
+#set text(font: fonts.body, size: 11pt, lang: "en")
 #set par(leading: 0.65em, justify: true)
 
 // Style headings
 #show heading: it => {
-  set text(font: "Helvetica", weight: "bold", fill: rgb(13, 32, 61))
+  set text(font: fonts.heading, weight: "bold", fill: rgb(13, 32, 61))
   v(18pt, weak: true)
   it
   v(10pt, weak: true)
@@ -40,9 +46,9 @@
       v(1.5cm, weak: true)
     }
     
-    text(font: "Helvetica", weight: "bold", size: 28pt, fill: rgb(13, 32, 61))[#title.replace("_", " ")]
+    text(font: fonts.heading, weight: "bold", size: 28pt, fill: rgb(13, 32, 61))[#title.replace("_", " ")]
     v(0.5cm, weak: true)
-    text(font: "Helvetica", size: 16pt, fill: rgb(45, 55, 72))[#subtitle]
+    text(font: fonts.body, size: 16pt, fill: rgb(45, 55, 72))[#subtitle]
     
     v(1fr)
   ]

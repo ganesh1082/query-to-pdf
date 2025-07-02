@@ -15,10 +15,10 @@
 )
 
 // Define a font scheme with IBM Plex Mono for titles and Trebuchet MS for body.
-// Using system fonts that are more likely to be available
+// Using system fonts with fallbacks for better availability
 #let fonts = (
-  body: "Arial",
-  heading: "Courier New",
+  body: ("Trebuchet MS", "Arial", "Helvetica", "sans-serif"),
+  heading: ("IBM Plex Mono", "Courier New", "monospace"),
 )
 
 // --- 2. DOCUMENT SETUP ---
@@ -99,23 +99,42 @@
 
 // --- 6. TWO-COLUMN LAYOUT FUNCTION ---
 
-#let two_column_section(title, content, chart_path, is_last: false) = {
+#let two_column_section(title, content, chart_path, chart_type, is_last: false) = {
   heading(title)
 
-  // First half: Two-column text layout (constrained to leave space for chart)
-  columns(2)[
-    #raw(content)
-  ]
+  // Create a grid layout with two rows: first half for text, second half for visuals
+  grid(
+    rows: (1fr, 1fr),  // Split page into two equal halves
+    gutter: 20pt,
+    align: (left, left),
+    
+    // First half: Two-column text layout (top half of page)
+    columns(2)[
+      #raw(content)
+    ],
+    
+    // Second half: Chart/visuals area (bottom half of page)
+    if chart_path != "" and chart_path != none and chart_type != "none" {
+      v(1em)
+      figure(
+        image(chart_path, width: 70%),
+        caption: "Visualization for: " + title
+      )
 
-  // Second half: Chart/visuals area positioned at bottom of page
-  if chart_path != "" and chart_path != none {
-    // Push content to bottom of page
-    v(1fr, weak: true)
-    figure(
-      image(chart_path, width: 60%),
-      caption: [Visualization for: #title]
-    )
-  }
+    } else if chart_type == "none" {
+      // For sections intentionally without charts, leave the second half empty
+      align(center)[
+        // Empty space for sections that don't need charts
+      ]
+    } else {
+      // If chart is missing due to error, show placeholder
+      align(center)[
+        text(fill: colors.secondary.lighten(30%), style: "italic")[
+          Chart not available for: #title
+        ]
+      ]
+    }
+  )
 
   // Only add page break if this is not the last section
   if not is_last {
@@ -150,6 +169,11 @@
     section.content,
     if "chart_path" in section {
       section.chart_path
+    } else {
+      ""
+    },
+    if "chart_type" in section {
+      section.chart_type
     } else {
       ""
     },

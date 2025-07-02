@@ -7,7 +7,8 @@ import asyncio
 from datetime import datetime
 
 # Import the content and visualization generators
-from advanced_content_generator import AdvancedContentGenerator, ReportConfig
+from report_planner import ReportPlanner, ReportType
+from advanced_content_generator import ReportConfig
 from enhanced_visualization_generator import PremiumVisualizationGenerator
 
 # Import the Typst renderer
@@ -17,7 +18,7 @@ class ProfessionalReportGenerator:
     """Orchestrates the AI-driven report generation with Typst."""
 
     def __init__(self, gemini_api_key: Optional[str]):
-        self.content_generator = AdvancedContentGenerator(api_key=gemini_api_key)
+        self.report_planner = ReportPlanner(api_key=gemini_api_key)
         # Initialize with default colors, will be updated based on template
         self.data_visualizer = PremiumVisualizationGenerator(brand_colors={"primary": "#0D203D", "accent": "#4A90E2"})
 
@@ -62,7 +63,7 @@ class ProfessionalReportGenerator:
     async def generate_comprehensive_report(self, config: ReportConfig, query: str, page_count: int, template: str = "template_1") -> str:
         
         print("\n🤖 Phase 1: AI is designing the full report blueprint...")
-        report_blueprint = await self.content_generator.generate_full_report_blueprint(query, page_count)
+        report_blueprint = await self.report_planner.generate_report_blueprint(query, page_count, ReportType.MARKET_RESEARCH)
         if not report_blueprint or "sections" not in report_blueprint:
             raise ValueError("AI failed to generate a valid report blueprint.")
         

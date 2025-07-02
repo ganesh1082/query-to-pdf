@@ -453,8 +453,53 @@ class PremiumVisualizationGenerator:
         return self._save_plot_to_file(fig, f"{chart_type}_{safe_title}")
 
     def _create_scatter_plot(self, data, title, palette, safe_title):
+        # Handle different data formats for scatter plots
         points = data.get("points", [])
-        if not points or not all('x' in p and 'y' in p for p in points): return self._create_placeholder_chart(title)
+        labels = data.get("labels", [])
+        values = data.get("values", [])
+        x_values = data.get("x", [])
+        y_values = data.get("y", [])
+        
+        # If we have labels and values with x,y coordinates, convert to points format
+        if labels and values and isinstance(values, list) and len(values) > 0:
+            if isinstance(values[0], dict) and 'x' in values[0] and 'y' in values[0]:
+                # Convert from labels + values format to points format
+                points = []
+                for i, (label, value) in enumerate(zip(labels, values)):
+                    if isinstance(value, dict) and 'x' in value and 'y' in value:
+                        points.append({
+                            'x': value['x'],
+                            'y': value['y'],
+                            'name': label
+                        })
+        
+        # If we have separate x and y arrays, convert to points format
+        elif x_values and y_values and isinstance(x_values, list) and isinstance(y_values, list):
+            if len(x_values) == len(y_values):
+                points = []
+                for i, (x, y) in enumerate(zip(x_values, y_values)):
+                    point_name = labels[i] if labels and i < len(labels) else f"Point {i+1}"
+                    points.append({
+                        'x': x,
+                        'y': y,
+                        'name': point_name
+                    })
+        
+        # If we have labels and simple numeric values, create a scatter plot with sequential x values
+        elif labels and values and isinstance(values, list) and len(values) > 0:
+            if all(isinstance(v, (int, float)) for v in values):
+                points = []
+                for i, (label, value) in enumerate(zip(labels, values)):
+                    points.append({
+                        'x': i + 1,  # Sequential x values (1, 2, 3, ...)
+                        'y': value,   # Use the value as y coordinate
+                        'name': label
+                    })
+        
+        if not points or not all('x' in p and 'y' in p for p in points): 
+            print(f"  ⚠️ Scatter plot data validation failed: points={bool(points)}, valid_points={all('x' in p and 'y' in p for p in points) if points else False}")
+            print(f"  🔍 Debug - Available data: x_values={bool(x_values)}, y_values={bool(y_values)}, labels={bool(labels)}, values={bool(values)}")
+            return self._create_placeholder_chart(title)
         
         fig, ax = plt.subplots(figsize=(10, 8))
         # Set transparent background
