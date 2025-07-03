@@ -3,6 +3,7 @@
 import os
 import json
 import subprocess
+import shutil
 from typing import Dict, Any
 
 def render_to_pdf_with_typst(report_data: Dict[str, Any], template_path: str, output_path: str) -> bool:
@@ -17,14 +18,21 @@ def render_to_pdf_with_typst(report_data: Dict[str, Any], template_path: str, ou
     Returns:
         bool: True if PDF generation was successful, False otherwise.
     """
-    # Create JSON file in the same directory as the template
-    template_dir = os.path.dirname(template_path)
-    data_json_path = os.path.join(template_dir, "report_data.json")
+    # Save the report data to report_data.json in the project root
+    data_path = "report_data.json"
+    with open(data_path, "w", encoding="utf-8") as f:
+        json.dump(report_data, f, indent=2, ensure_ascii=False)
+    
+    # Copy the data file to the templates directory
+    templates_dir = os.path.dirname(template_path)
+    dest_path = os.path.join(templates_dir, "report_data.json")
+    shutil.copyfile(data_path, dest_path)
+    
     success = False
     
     try:
         # 1. Write the dynamic data to a JSON file that Typst can read.
-        with open(data_json_path, "w", encoding="utf-8") as f:
+        with open(data_path, "w", encoding="utf-8") as f:
             json.dump(report_data, f, ensure_ascii=False, indent=2)
         
         print("  📄 Wrote report data to report_data.json")
@@ -76,8 +84,8 @@ def render_to_pdf_with_typst(report_data: Dict[str, Any], template_path: str, ou
         
     finally:
         # 4. Clean up the temporary JSON file.
-        if os.path.exists(data_json_path):
-            os.remove(data_json_path)
+        if os.path.exists(data_path):
+            os.remove(data_path)
             print("  🗑️ Cleaned up temporary data file.")
     
     return success

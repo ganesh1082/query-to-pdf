@@ -1,9 +1,10 @@
 # query-to-pdf/enhanced_visualization_generator.py
 
 import matplotlib.pyplot as plt
+import matplotlib.patches as patches
 import seaborn as sns
 import os
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 import warnings
 
 warnings.simplefilter(action='ignore', category=FutureWarning)
@@ -202,6 +203,7 @@ class PremiumVisualizationGenerator:
 
         safe_title = "".join(c for c in (title or "") if c.isalnum()).replace(' ', '_')[:30]
 
+        # Basic charts
         if chart_type in ["bar", "horizontalBar"]:
             return self._create_bar_chart(data, title, palette, chart_type, safe_title)
         if chart_type in ["line", "area"]:
@@ -210,6 +212,50 @@ class PremiumVisualizationGenerator:
             return self._create_pie_or_donut_chart(data, title, palette, chart_type, safe_title)
         if chart_type == "scatter":
             return self._create_scatter_plot(data, title, palette, safe_title)
+        
+        # Multi-series charts
+        if chart_type == "stackedBar":
+            return self._create_stacked_bar_chart(data, title, palette, safe_title)
+        if chart_type == "multiLine":
+            return self._create_multi_line_chart(data, title, safe_title)
+        
+        # Advanced analytics
+        if chart_type == "radar":
+            return self._create_radar_chart(data, title, safe_title)
+        if chart_type == "bubble":
+            return self._create_bubble_chart(data, title, safe_title)
+        
+        # Business process charts
+        if chart_type == "waterfall":
+            return self._create_waterfall_chart(data, title, safe_title)
+        if chart_type == "funnel":
+            return self._create_funnel_chart(data, title, safe_title)
+        if chart_type == "flowchart":
+            return self._create_flowchart_chart(data, title, safe_title)
+        
+        # Specialized charts
+        if chart_type == "heatmap":
+            return self._create_heatmap_chart(data, title, safe_title)
+        if chart_type == "gauge":
+            return self._create_gauge_chart(data, title, safe_title)
+        if chart_type == "treeMap":
+            return self._create_tree_map_chart(data, title, safe_title)
+        if chart_type == "sunburst":
+            return self._create_sunburst_chart(data, title, safe_title)
+        
+        # Financial charts
+        if chart_type == "candlestick":
+            return self._create_candlestick_chart(data, title, safe_title)
+        
+        # Statistical charts
+        if chart_type == "boxPlot":
+            return self._create_box_plot_chart(data, title, safe_title)
+        if chart_type == "violinPlot":
+            return self._create_violin_plot_chart(data, title, safe_title)
+        if chart_type == "histogram":
+            return self._create_histogram_chart(data, title, safe_title)
+        if chart_type == "pareto":
+            return self._create_pareto_chart(data, title, safe_title)
         
         return self._create_placeholder_chart(f"Unsupported Chart: {chart_type}")
 
@@ -457,8 +503,9 @@ class PremiumVisualizationGenerator:
         points = data.get("points", [])
         labels = data.get("labels", [])
         values = data.get("values", [])
-        x_values = data.get("x", [])
-        y_values = data.get("y", [])
+        x_values = data.get("x_values", [])  # Changed from "x" to "x_values"
+        y_values = data.get("y_values", [])  # Changed from "y" to "y_values"
+        sizes = data.get("sizes", [])
         
         # If we have labels and values with x,y coordinates, convert to points format
         if labels and values and isinstance(values, list) and len(values) > 0:
@@ -473,16 +520,18 @@ class PremiumVisualizationGenerator:
                             'name': label
                         })
         
-        # If we have separate x and y arrays, convert to points format
+        # If we have separate x_values and y_values arrays, convert to points format
         elif x_values and y_values and isinstance(x_values, list) and isinstance(y_values, list):
             if len(x_values) == len(y_values):
                 points = []
                 for i, (x, y) in enumerate(zip(x_values, y_values)):
                     point_name = labels[i] if labels and i < len(labels) else f"Point {i+1}"
+                    point_size = sizes[i] if sizes and i < len(sizes) else 150
                     points.append({
                         'x': x,
                         'y': y,
-                        'name': point_name
+                        'name': point_name,
+                        'size': point_size
                     })
         
         # If we have labels and simple numeric values, create a scatter plot with sequential x values
@@ -529,3 +578,720 @@ class PremiumVisualizationGenerator:
         ax.tick_params(colors=self.secondary_color)
         
         return self._save_plot_to_file(fig, f"scatter_{safe_title}")
+
+    def _create_stacked_bar_chart(self, data, title, palette, safe_title):
+        """Create a stacked bar chart."""
+        labels = data.get("labels", [])
+        series = data.get("series", [])
+        
+        if not labels or not series:
+            return self._create_placeholder_chart(title)
+        
+        fig, ax = plt.subplots(figsize=(10, 7))
+        fig.patch.set_alpha(0.0)
+        ax.patch.set_alpha(0.0)
+        
+        # Use template colors
+        template_colors = self._get_template_palette(len(series))
+        
+        # Create stacked bars
+        bottom: Optional[List[float]] = None
+        for i, series_data in enumerate(series):
+            if isinstance(series_data, dict) and 'values' in series_data:
+                values = series_data['values']
+                name = series_data.get('name', f'Series {i+1}')
+                color = template_colors[i % len(template_colors)]
+                
+                if bottom is None:
+                    bars = ax.bar(labels, values, color=color, label=name)
+                    bottom = values
+                else:
+                    bars = ax.bar(labels, values, bottom=bottom, color=color, label=name)
+                    bottom = [b + v for b, v in zip(bottom, values)]
+        
+        ax.set_title(title, fontsize=14, fontweight='bold', color=self.primary_color)
+        ax.legend(frameon=False)
+        ax.tick_params(axis='x', rotation=25, colors=self.secondary_color)
+        ax.tick_params(axis='y', colors=self.secondary_color)
+        
+        # Style the chart
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+        ax.spines['left'].set_color(self.secondary_color)
+        ax.spines['bottom'].set_color(self.secondary_color)
+        
+        plt.tight_layout()
+        return self._save_plot_to_file(fig, f"stackedBar_{safe_title}")
+
+    def _create_multi_line_chart(self, data, title, safe_title):
+        """Create a multi-line chart."""
+        # This is already handled in _create_line_or_area_chart for multi-series
+        return self._create_line_or_area_chart(data, title, "line", safe_title)
+
+    def _create_radar_chart(self, data, title, safe_title):
+        """Create a radar chart."""
+        labels = data.get("labels", [])
+        values = data.get("values", [])
+        
+        if not labels or not values or len(labels) != len(values):
+            return self._create_placeholder_chart(title)
+        
+        # Number of variables
+        N = len(labels)
+        
+        # Compute angle for each axis
+        angles = [n / float(N) * 2 * 3.14159 for n in range(N)]
+        angles += angles[:1]  # Complete the circle
+        
+        # Add the first value at the end to close the polygon
+        values += values[:1]
+        
+        fig, ax = plt.subplots(figsize=(8, 8), subplot_kw=dict(projection='polar'))
+        fig.patch.set_alpha(0.0)
+        ax.patch.set_alpha(0.0)
+        
+        # Plot the radar chart
+        ax.plot(angles, values, 'o-', linewidth=2, color=self.primary_color)
+        ax.fill(angles, values, alpha=0.25, color=self.primary_color)
+        
+        # Set the labels
+        ax.set_xticks(angles[:-1])
+        ax.set_xticklabels(labels, color=self.secondary_color)
+        
+        # Set the y-axis limits
+        ax.set_ylim(0, max(values) * 1.1)
+        
+        ax.set_title(title, fontsize=14, fontweight='bold', color=self.primary_color, pad=20)
+        
+        plt.tight_layout()
+        return self._save_plot_to_file(fig, f"radar_{safe_title}")
+
+    def _create_bubble_chart(self, data, title, safe_title):
+        """Create a bubble chart."""
+        labels = data.get("labels", [])
+        x_values = data.get("x_values", [])
+        y_values = data.get("y_values", [])
+        sizes = data.get("sizes", [])
+        
+        if not all([labels, x_values, y_values]) or len(labels) != len(x_values) != len(y_values):
+            return self._create_placeholder_chart(title)
+        
+        # Use sizes if provided, otherwise default to 100
+        if not sizes:
+            sizes = [100] * len(labels)
+        
+        fig, ax = plt.subplots(figsize=(10, 8))
+        fig.patch.set_alpha(0.0)
+        ax.patch.set_alpha(0.0)
+        
+        # Use template colors
+        template_colors = self._get_template_palette(len(labels))
+        
+        for i, (label, x, y, size) in enumerate(zip(labels, x_values, y_values, sizes)):
+            color = template_colors[i % len(template_colors)]
+            ax.scatter(x, y, s=size, alpha=0.7, color=color, label=label)
+            ax.annotate(label, (x, y), xytext=(5, 5), textcoords='offset points', 
+                       fontsize=9, color=self.secondary_color)
+        
+        ax.set_title(title, fontsize=14, fontweight='bold', color=self.primary_color)
+        ax.legend(frameon=False)
+        ax.grid(True, alpha=0.3, color=self.secondary_color)
+        
+        # Style the chart
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+        ax.spines['left'].set_color(self.secondary_color)
+        ax.spines['bottom'].set_color(self.secondary_color)
+        ax.tick_params(colors=self.secondary_color)
+        
+        plt.tight_layout()
+        return self._save_plot_to_file(fig, f"bubble_{safe_title}")
+
+    def _create_waterfall_chart(self, data, title, safe_title):
+        """Create a waterfall chart."""
+        labels = data.get("labels", [])
+        values = data.get("values", [])
+        
+        if not labels or not values or len(labels) != len(values):
+            return self._create_placeholder_chart(title)
+        
+        fig, ax = plt.subplots(figsize=(12, 8))
+        fig.patch.set_alpha(0.0)
+        ax.patch.set_alpha(0.0)
+        
+        # Calculate positions for bars
+        positions = list(range(len(labels)))
+        
+        # Separate positive and negative values
+        positive_values = [v if v > 0 else 0 for v in values]
+        negative_values = [v if v < 0 else 0 for v in values]
+        
+        # Calculate cumulative values for positioning
+        cumulative = 0
+        bar_positions = []
+        for i, val in enumerate(values):
+            bar_positions.append(cumulative)
+            cumulative += val
+        
+        # Create bars
+        colors = []
+        for val in values:
+            if val > 0:
+                colors.append(self.primary_color)
+            elif val < 0:
+                colors.append(self.accent_color)
+            else:
+                colors.append(self.secondary_color)
+        
+        bars = ax.bar(positions, values, bottom=bar_positions, color=colors, alpha=0.7)
+        
+        # Add value labels on bars
+        for i, (bar, val) in enumerate(zip(bars, values)):
+            height = bar.get_height()
+            ax.text(bar.get_x() + bar.get_width()/2., bar.get_y() + height/2.,
+                   f'{val:.1f}', ha='center', va='center', fontweight='bold', fontsize=10)
+        
+        ax.set_title(title, fontsize=14, fontweight='bold', color=self.primary_color)
+        ax.set_xticks(positions)
+        ax.set_xticklabels(labels, rotation=45, ha='right', color=self.secondary_color)
+        ax.tick_params(axis='y', colors=self.secondary_color)
+        
+        # Style the chart
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+        ax.spines['left'].set_color(self.secondary_color)
+        ax.spines['bottom'].set_color(self.secondary_color)
+        
+        plt.tight_layout()
+        return self._save_plot_to_file(fig, f"waterfall_{safe_title}")
+
+    def _create_funnel_chart(self, data, title, safe_title):
+        """Create a funnel chart."""
+        labels = data.get("labels", [])
+        values = data.get("values", [])
+        
+        if not labels or not values or len(labels) != len(values):
+            return self._create_placeholder_chart(title)
+        
+        fig, ax = plt.subplots(figsize=(8, 10))
+        fig.patch.set_alpha(0.0)
+        ax.patch.set_alpha(0.0)
+        
+        # Normalize values to create funnel effect
+        max_val = max(values)
+        normalized_values = [v / max_val for v in values]
+        
+        # Create funnel bars
+        y_positions = list(range(len(labels)))
+        template_colors = self._get_template_palette(len(labels))
+        
+        for i, (label, value, norm_val, color) in enumerate(zip(labels, values, normalized_values, template_colors)):
+            # Create horizontal bar with decreasing width
+            bar_width = norm_val * 0.8  # Scale down for visual appeal
+            ax.barh(i, bar_width, height=0.6, color=color, alpha=0.8)
+            
+            # Add value label
+            ax.text(bar_width + 0.05, i, f'{value}', va='center', fontweight='bold', 
+                   color=self.secondary_color, fontsize=10)
+            
+            # Add stage label
+            ax.text(-0.1, i, label, va='center', ha='right', color=self.secondary_color, fontsize=10)
+        
+        ax.set_title(title, fontsize=14, fontweight='bold', color=self.primary_color)
+        ax.set_xlim(0, 1)
+        ax.set_ylim(-0.5, len(labels) - 0.5)
+        ax.set_xticks([])
+        ax.set_yticks([])
+        
+        # Style the chart
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+        ax.spines['left'].set_visible(False)
+        ax.spines['bottom'].set_visible(False)
+        
+        plt.tight_layout()
+        return self._save_plot_to_file(fig, f"funnel_{safe_title}")
+
+    def _create_heatmap_chart(self, data, title, safe_title):
+        """Create a heatmap chart."""
+        labels = data.get("labels", [])
+        categories = data.get("categories", [])
+        values = data.get("values", [])
+        
+        if not all([labels, categories, values]):
+            return self._create_placeholder_chart(title)
+        
+        # Convert to 2D array if needed
+        if isinstance(values[0], list):
+            heatmap_data = values
+        else:
+            # Reshape 1D array to 2D
+            import numpy as np
+            try:
+                heatmap_data = np.array(values).reshape(len(categories), len(labels))
+            except (ValueError, TypeError):
+                return self._create_placeholder_chart(title)
+        
+        fig, ax = plt.subplots(figsize=(10, 8))
+        fig.patch.set_alpha(0.0)
+        ax.patch.set_alpha(0.0)
+        
+        # Create heatmap - convert to list if needed
+        if hasattr(heatmap_data, 'tolist'):
+            heatmap_data = heatmap_data.tolist()
+        im = ax.imshow(heatmap_data, cmap='YlOrRd', aspect='auto')  # type: ignore
+        
+        # Set labels
+        ax.set_xticks(range(len(labels)))
+        ax.set_yticks(range(len(categories)))
+        ax.set_xticklabels(labels, rotation=45, ha='right', color=self.secondary_color)
+        ax.set_yticklabels(categories, color=self.secondary_color)
+        
+        # Add colorbar
+        cbar = plt.colorbar(im, ax=ax)
+        cbar.ax.tick_params(colors=self.secondary_color)
+        
+        # Add value annotations
+        for i in range(len(categories)):
+            for j in range(len(labels)):
+                text = ax.text(j, i, f'{heatmap_data[i][j]:.1f}',
+                              ha="center", va="center", color="white", fontweight='bold')
+        
+        ax.set_title(title, fontsize=14, fontweight='bold', color=self.primary_color)
+        
+        plt.tight_layout()
+        return self._save_plot_to_file(fig, f"heatmap_{safe_title}")
+
+    def _create_gauge_chart(self, data, title, safe_title):
+        """Create a gauge chart."""
+        value = data.get("value", 0)
+        max_val = data.get("max", 100)
+        label = data.get("label", "Value")
+        
+        fig, ax = plt.subplots(figsize=(8, 6))
+        fig.patch.set_alpha(0.0)
+        ax.patch.set_alpha(0.0)
+        
+        # Create gauge
+        percentage = value / max_val
+        
+        # Create pie chart for gauge
+        sizes = [percentage, 1 - percentage]
+        colors = [self.primary_color, self.secondary_color]
+        
+        pie_result = ax.pie(sizes, colors=colors, startangle=90, 
+                           counterclock=False, wedgeprops=dict(width=0.5))
+        wedges, texts = pie_result[:2]  # Only take first two elements
+        
+        # Add center text
+        ax.text(0, 0, f'{value}\n{label}', ha='center', va='center', 
+               fontsize=16, fontweight='bold', color=self.primary_color)
+        
+        ax.set_title(title, fontsize=14, fontweight='bold', color=self.primary_color)
+        ax.axis('equal')
+        
+        plt.tight_layout()
+        return self._save_plot_to_file(fig, f"gauge_{safe_title}")
+
+    def _create_tree_map_chart(self, data, title, safe_title):
+        """Create a tree map chart."""
+        labels = data.get("labels", [])
+        values = data.get("values", [])
+        subcategories = data.get("subcategories", [])
+        
+        if not labels or not values or len(labels) != len(values):
+            return self._create_placeholder_chart(title)
+        
+        fig, ax = plt.subplots(figsize=(12, 8))
+        fig.patch.set_alpha(0.0)
+        ax.patch.set_alpha(0.0)
+        
+        # Create simple rectangle representation
+        total = sum(values)
+        template_colors = self._get_template_palette(len(labels))
+        
+        current_x = 0
+        for i, (label, value, color) in enumerate(zip(labels, values, template_colors)):
+            width = value / total
+            rect = plt.Rectangle((current_x, 0), width, 1, facecolor=color, alpha=0.8)
+            ax.add_patch(rect)
+            
+            # Add label
+            ax.text(current_x + width/2, 0.5, f'{label}\n{value}', 
+                   ha='center', va='center', fontweight='bold', color='white', fontsize=10)
+            
+            current_x += width
+        
+        ax.set_xlim(0, 1)
+        ax.set_ylim(0, 1)
+        ax.set_xticks([])
+        ax.set_yticks([])
+        ax.set_title(title, fontsize=14, fontweight='bold', color=self.primary_color)
+        
+        # Style the chart
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+        ax.spines['left'].set_visible(False)
+        ax.spines['bottom'].set_visible(False)
+        
+        plt.tight_layout()
+        return self._save_plot_to_file(fig, f"treeMap_{safe_title}")
+
+    def _create_sunburst_chart(self, data, title, safe_title):
+        """Create a sunburst chart."""
+        labels = data.get("labels", [])
+        values = data.get("values", [])
+        children = data.get("children", [])
+        
+        if not labels or not values or len(labels) != len(values):
+            return self._create_placeholder_chart(title)
+        
+        fig, ax = plt.subplots(figsize=(10, 10))
+        fig.patch.set_alpha(0.0)
+        ax.patch.set_alpha(0.0)
+        
+        # Create simple nested pie chart representation
+        template_colors = self._get_template_palette(len(labels))
+        
+        # Create outer ring
+        pie_result = ax.pie(values, labels=labels, colors=template_colors, 
+                           startangle=90, radius=1.0)
+        wedges, texts = pie_result[:2]  # Only take first two elements
+        
+        # Add inner ring if children data is available
+        if children and len(children) == len(labels):
+            inner_values = []
+            inner_labels = []
+            for child_list in children:
+                if isinstance(child_list, list):
+                    inner_values.extend([1] * len(child_list))  # Equal size for simplicity
+                    inner_labels.extend(child_list)
+            
+            if inner_values:
+                inner_colors = self._get_template_palette(len(inner_values))
+                ax.pie(inner_values, labels=inner_labels, colors=inner_colors, 
+                      startangle=90, radius=0.6)
+        
+        ax.set_title(title, fontsize=14, fontweight='bold', color=self.primary_color)
+        ax.axis('equal')
+        
+        plt.tight_layout()
+        return self._save_plot_to_file(fig, f"sunburst_{safe_title}")
+
+    def _create_candlestick_chart(self, data, title, safe_title):
+        """Create a candlestick chart."""
+        labels = data.get("labels", [])
+        open_prices = data.get("open", [])
+        high_prices = data.get("high", [])
+        low_prices = data.get("low", [])
+        close_prices = data.get("close", [])
+        
+        if not all([labels, open_prices, high_prices, low_prices, close_prices]):
+            return self._create_placeholder_chart(title)
+        
+        fig, ax = plt.subplots(figsize=(12, 8))
+        fig.patch.set_alpha(0.0)
+        ax.patch.set_alpha(0.0)
+        
+        # Create candlestick representation
+        positions = list(range(len(labels)))
+        
+        for i, (open_price, high_price, low_price, close_price) in enumerate(zip(open_prices, high_prices, low_prices, close_prices)):
+            # Determine color based on price movement
+            color = self.primary_color if close_price >= open_price else self.accent_color
+            
+            # Draw the wick (high to low)
+            ax.plot([i, i], [low_price, high_price], color=color, linewidth=1)
+            
+            # Draw the body
+            body_height = abs(close_price - open_price)
+            body_bottom = min(open_price, close_price)
+            
+            rect = plt.Rectangle((i-0.3, body_bottom), 0.6, body_height, 
+                               facecolor=color, alpha=0.8)
+            ax.add_patch(rect)
+        
+        ax.set_title(title, fontsize=14, fontweight='bold', color=self.primary_color)
+        ax.set_xticks(positions)
+        ax.set_xticklabels(labels, rotation=45, ha='right', color=self.secondary_color)
+        ax.tick_params(axis='y', colors=self.secondary_color)
+        
+        # Style the chart
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+        ax.spines['left'].set_color(self.secondary_color)
+        ax.spines['bottom'].set_color(self.secondary_color)
+        
+        plt.tight_layout()
+        return self._save_plot_to_file(fig, f"candlestick_{safe_title}")
+
+    def _create_box_plot_chart(self, data, title, safe_title):
+        """Create a box plot chart."""
+        labels = data.get("labels", [])
+        plot_data = data.get("data", [])
+        
+        if not labels or not plot_data or len(labels) != len(plot_data):
+            return self._create_placeholder_chart(title)
+        
+        fig, ax = plt.subplots(figsize=(10, 8))
+        fig.patch.set_alpha(0.0)
+        ax.patch.set_alpha(0.0)
+        
+        # Create box plot
+        bp = ax.boxplot(plot_data, patch_artist=True)
+        
+        # Set x-axis labels
+        ax.set_xticklabels(labels, rotation=45, ha='right')
+        
+        # Color the boxes
+        template_colors = self._get_template_palette(len(labels))
+        for i, patch in enumerate(bp['boxes']):
+            color = template_colors[i % len(template_colors)]
+            patch.set_facecolor(color)
+            patch.set_alpha(0.7)
+        
+        ax.set_title(title, fontsize=14, fontweight='bold', color=self.primary_color)
+        ax.tick_params(axis='x', rotation=45, colors=self.secondary_color)
+        ax.tick_params(axis='y', colors=self.secondary_color)
+        
+        # Style the chart
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+        ax.spines['left'].set_color(self.secondary_color)
+        ax.spines['bottom'].set_color(self.secondary_color)
+        
+        plt.tight_layout()
+        return self._save_plot_to_file(fig, f"boxPlot_{safe_title}")
+
+    def _create_violin_plot_chart(self, data, title, safe_title):
+        """Create a violin plot chart."""
+        labels = data.get("labels", [])
+        plot_data = data.get("data", [])
+        
+        if not labels or not plot_data or len(labels) != len(plot_data):
+            return self._create_placeholder_chart(title)
+        
+        fig, ax = plt.subplots(figsize=(10, 8))
+        fig.patch.set_alpha(0.0)
+        ax.patch.set_alpha(0.0)
+        
+        # Create violin plot
+        vp = ax.violinplot(plot_data, positions=range(len(labels)))
+        
+        # Color the violins
+        template_colors = self._get_template_palette(len(labels))
+        bodies = list(vp['bodies'])  # type: ignore # Convert to list for enumeration
+        for i, pc in enumerate(bodies):
+            color = template_colors[i % len(template_colors)]
+            pc.set_facecolor(color)
+            pc.set_alpha(0.7)
+        
+        ax.set_title(title, fontsize=14, fontweight='bold', color=self.primary_color)
+        ax.set_xticks(range(len(labels)))
+        ax.set_xticklabels(labels, rotation=45, ha='right', color=self.secondary_color)
+        ax.tick_params(axis='y', colors=self.secondary_color)
+        
+        # Style the chart
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+        ax.spines['left'].set_color(self.secondary_color)
+        ax.spines['bottom'].set_color(self.secondary_color)
+        
+        plt.tight_layout()
+        return self._save_plot_to_file(fig, f"violinPlot_{safe_title}")
+
+    def _create_histogram_chart(self, data, title, safe_title):
+        """Create a histogram chart."""
+        labels = data.get("labels", [])
+        values = data.get("values", [])
+        
+        if not labels or not values or len(labels) != len(values):
+            return self._create_placeholder_chart(title)
+        
+        fig, ax = plt.subplots(figsize=(10, 8))
+        fig.patch.set_alpha(0.0)
+        ax.patch.set_alpha(0.0)
+        
+        # Create histogram
+        bars = ax.bar(labels, values, color=self.primary_color, alpha=0.7)
+        
+        # Add value labels on bars
+        for bar, value in zip(bars, values):
+            height = bar.get_height()
+            ax.text(bar.get_x() + bar.get_width()/2., height + max(values)*0.01,
+                   f'{value}', ha='center', va='bottom', fontweight='bold', fontsize=10)
+        
+        ax.set_title(title, fontsize=14, fontweight='bold', color=self.primary_color)
+        ax.tick_params(axis='x', rotation=45, colors=self.secondary_color)
+        ax.tick_params(axis='y', colors=self.secondary_color)
+        
+        # Style the chart
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+        ax.spines['left'].set_color(self.secondary_color)
+        ax.spines['bottom'].set_color(self.secondary_color)
+        
+        plt.tight_layout()
+        return self._save_plot_to_file(fig, f"histogram_{safe_title}")
+
+    def _create_pareto_chart(self, data, title, safe_title):
+        """Create a Pareto chart."""
+        labels = data.get("labels", [])
+        values = data.get("values", [])
+        cumulative = data.get("cumulative", [])
+        
+        if not labels or not values or len(labels) != len(values):
+            return self._create_placeholder_chart(title)
+        
+        fig, ax1 = plt.subplots(figsize=(12, 8))
+        fig.patch.set_alpha(0.0)
+        ax1.patch.set_alpha(0.0)
+        
+        # Create secondary y-axis for cumulative line
+        ax2 = ax1.twinx()
+        
+        # Create bar chart
+        bars = ax1.bar(labels, values, color=self.primary_color, alpha=0.7)
+        
+        # Create cumulative line
+        if cumulative and len(cumulative) == len(labels):
+            line = ax2.plot(labels, cumulative, color=self.accent_color, linewidth=2, marker='o')
+        else:
+            # Calculate cumulative if not provided
+            cumulative_values = []
+            total = sum(values)
+            running_total = 0
+            for value in values:
+                running_total += value
+                cumulative_values.append((running_total / total) * 100)
+            line = ax2.plot(labels, cumulative_values, color=self.accent_color, linewidth=2, marker='o')
+        
+        # Add value labels on bars
+        for bar, value in zip(bars, values):
+            height = bar.get_height()
+            ax1.text(bar.get_x() + bar.get_width()/2., height + max(values)*0.01,
+                    f'{value}', ha='center', va='bottom', fontweight='bold', fontsize=10)
+        
+        ax1.set_title(title, fontsize=14, fontweight='bold', color=self.primary_color)
+        ax1.tick_params(axis='x', rotation=45, colors=self.secondary_color)
+        ax1.tick_params(axis='y', colors=self.secondary_color)
+        ax2.tick_params(axis='y', colors=self.accent_color)
+        
+        # Set labels
+        ax1.set_ylabel('Frequency', color=self.secondary_color)
+        ax2.set_ylabel('Cumulative %', color=self.accent_color)
+        
+        # Style the chart
+        ax1.spines['top'].set_visible(False)
+        ax1.spines['right'].set_visible(False)
+        ax1.spines['left'].set_color(self.secondary_color)
+        ax1.spines['bottom'].set_color(self.secondary_color)
+        
+        plt.tight_layout()
+        return self._save_plot_to_file(fig, f"pareto_{safe_title}")
+
+    def _create_flowchart_chart(self, data, title, safe_title):
+        """Create a flowchart chart using matplotlib."""
+        # Extract flowchart data
+        nodes = data.get("nodes", [])
+        connections = data.get("connections", [])
+        
+        if not nodes:
+            return self._create_placeholder_chart(title)
+        
+        fig, ax = plt.subplots(figsize=(12, 10))
+        fig.patch.set_alpha(0.0)
+        ax.patch.set_alpha(0.0)
+        
+        # Set up the plot
+        ax.set_xlim(0, 10)
+        ax.set_ylim(0, 10)
+        ax.axis('off')
+        
+        # Define node positions (simple grid layout)
+        node_positions = {}
+        num_nodes = len(nodes)
+        cols = min(3, num_nodes)
+        rows = (num_nodes + cols - 1) // cols
+        
+        for i, node in enumerate(nodes):
+            row = i // cols
+            col = i % cols
+            x = 2 + col * 3
+            y = 8 - row * 2.5
+            node_positions[node.get("id", f"node_{i}")] = (x, y)
+        
+        # Draw connections first (so they appear behind nodes)
+        template_colors = self._get_template_palette(len(connections) if connections else 1)
+        
+        for i, connection in enumerate(connections):
+            from_node = connection.get("from")
+            to_node = connection.get("to")
+            label = connection.get("label", "")
+            
+            if from_node in node_positions and to_node in node_positions:
+                x1, y1 = node_positions[from_node]
+                x2, y2 = node_positions[to_node]
+                
+                # Draw arrow
+                color = template_colors[i % len(template_colors)]
+                ax.annotate('', xy=(x2, y2), xytext=(x1, y1),
+                           arrowprops=dict(arrowstyle='->', color=color, lw=2))
+                
+                # Add label if provided
+                if label:
+                    mid_x = (x1 + x2) / 2
+                    mid_y = (y1 + y2) / 2
+                    ax.text(mid_x, mid_y, label, ha='center', va='center',
+                           bbox=dict(boxstyle='round,pad=0.3', facecolor='white', alpha=0.8),  # type: ignore
+                           fontsize=8, color=self.secondary_color)
+        
+        # Draw nodes
+        for i, node in enumerate(nodes):
+            node_id = node.get("id", f"node_{i}")
+            node_label = node.get("label", f"Node {i+1}")
+            node_type = node.get("type", "process")  # process, decision, start, end
+            
+            if node_id in node_positions:
+                x, y = node_positions[node_id]
+                
+                # Choose shape based on node type
+                if node_type == "decision":
+                    # Diamond shape
+                    diamond_x = [x, x+0.8, x, x-0.8, x]
+                    diamond_y = [y+0.6, y, y-0.6, y, y+0.6]
+                    ax.fill(diamond_x, diamond_y, color=self.primary_color, alpha=0.8)
+                    ax.plot(diamond_x, diamond_y, color=self.primary_color, lw=2)
+                elif node_type == "start":
+                    # Oval shape (approximated with ellipse)
+                    ellipse = patches.Ellipse((x, y), 1.6, 1.2, 
+                                            color=self.accent_color, alpha=0.8)
+                    ax.add_patch(ellipse)
+                    ellipse = patches.Ellipse((x, y), 1.6, 1.2, 
+                                            color=self.accent_color, lw=2, fill=False)
+                    ax.add_patch(ellipse)
+                elif node_type == "end":
+                    # Oval shape (approximated with ellipse)
+                    ellipse = patches.Ellipse((x, y), 1.6, 1.2, 
+                                            color=self.accent_color, alpha=0.8)
+                    ax.add_patch(ellipse)
+                    ellipse = patches.Ellipse((x, y), 1.6, 1.2, 
+                                            color=self.accent_color, lw=2, fill=False)
+                    ax.add_patch(ellipse)
+                else:
+                    # Rectangle for process nodes
+                    rect = plt.Rectangle((x-0.8, y-0.4), 1.6, 0.8, 
+                                       color=self.primary_color, alpha=0.8)
+                    ax.add_patch(rect)
+                    rect = plt.Rectangle((x-0.8, y-0.4), 1.6, 0.8, 
+                                       color=self.primary_color, lw=2, fill=False)
+                    ax.add_patch(rect)
+                
+                # Add node label
+                ax.text(x, y, node_label, ha='center', va='center', 
+                       fontsize=9, fontweight='bold', color='white')
+        
+        ax.set_title(title, fontsize=14, fontweight='bold', color=self.primary_color, pad=20)
+        
+        plt.tight_layout()
+        return self._save_plot_to_file(fig, f"flowchart_{safe_title}")

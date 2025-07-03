@@ -14,13 +14,19 @@ from enhanced_visualization_generator import PremiumVisualizationGenerator
 # Import the Typst renderer
 from typst_renderer import render_to_pdf_with_typst
 
+# Import Firecrawl integration
+from firecrawl_integration import FirecrawlReportGenerator
+
 class ProfessionalReportGenerator:
     """Orchestrates the AI-driven report generation with Typst."""
 
-    def __init__(self, gemini_api_key: Optional[str]):
+    def __init__(self, gemini_api_key: Optional[str], firecrawl_api_key: Optional[str] = None):
         self.report_planner = ReportPlanner(api_key=gemini_api_key)
         # Initialize with default colors, will be updated based on template
         self.data_visualizer = PremiumVisualizationGenerator(brand_colors={"primary": "#0D203D", "accent": "#4A90E2"})
+        
+        # Initialize Firecrawl integration
+        self.firecrawl_generator = FirecrawlReportGenerator(firecrawl_api_key, gemini_api_key) if firecrawl_api_key else None
 
     def _get_template_colors(self, template: str) -> Dict[str, str]:
         """Extract color palette from the specified template."""
@@ -60,8 +66,28 @@ class ProfessionalReportGenerator:
         
         return content
 
-    async def generate_comprehensive_report(self, config: ReportConfig, query: str, page_count: int, template: str = "template_1") -> str:
+    async def generate_comprehensive_report(self, config: ReportConfig, query: str, page_count: int, template: str = "template_1", use_web_research: bool = False) -> str:
         
+        # Check if we should use web research
+        if use_web_research and self.firecrawl_generator:
+            print("\n🌐 Using real-time web research with Firecrawl...")
+            try:
+                result = await self.firecrawl_generator.generate_report_from_web_research(
+                    query=query,
+                    page_count=page_count,
+                    report_type=ReportType.MARKET_RESEARCH
+                )
+                
+                if result["success"]:
+                    print(f"✅ Web research report generated: {result['pdf_path']}")
+                    print(f"💳 Credits used: {result['credits_used']}")
+                    return result['pdf_path']
+                else:
+                    print("❌ Web research failed, falling back to AI generation")
+            except Exception as e:
+                print(f"❌ Web research error: {e}, falling back to AI generation")
+        
+        # Fallback to AI-generated content
         print("\n🤖 Phase 1: AI is designing the full report blueprint...")
         report_blueprint = await self.report_planner.generate_report_blueprint(query, page_count, ReportType.MARKET_RESEARCH)
         if not report_blueprint or "sections" not in report_blueprint:

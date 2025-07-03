@@ -43,6 +43,11 @@ async def main():
         choices=["template_1", "template_2"],
         help="The template to use for the report layout (template_1: single column, template_2: two column)."
     )
+    parser.add_argument(
+        "--web-research",
+        action="store_true",
+        help="Use real-time web research with Firecrawl instead of AI-generated content."
+    )
     args = parser.parse_args()
     
     print("🚀 AI-Powered Report Generator v2.1 (Typst Edition)")
@@ -50,12 +55,19 @@ async def main():
     print(f"  Prompt: {args.prompt}")
     print(f"  Target Pages: ~{args.pages}")
     print(f"  Template: {args.template}")
+    print(f"  Web Research: {'Yes' if args.web_research else 'No'}")
     print("======================================================")
     
     gemini_api_key = os.getenv("GEMINI_API_KEY")
+    firecrawl_api_key = os.getenv("FIRECRAWL_API_KEY")
+    
     if not gemini_api_key:
         print("❌ FATAL: GEMINI_API_KEY not found in the .env file. Please add it.")
         return
+    
+    if args.web_research and not firecrawl_api_key:
+        print("❌ WARNING: FIRECRAWL_API_KEY not found. Web research will be disabled.")
+        args.web_research = False
 
     report_num = get_next_report_number()
     report_title_safe = args.prompt[:40].replace(' ', '_').replace(',', '')
@@ -72,8 +84,8 @@ async def main():
     )
     
     try:
-        generator = ProfessionalReportGenerator(gemini_api_key=gemini_api_key)
-        output_file = await generator.generate_comprehensive_report(config, args.prompt, args.pages, args.template)
+        generator = ProfessionalReportGenerator(gemini_api_key=gemini_api_key, firecrawl_api_key=firecrawl_api_key)
+        output_file = await generator.generate_comprehensive_report(config, args.prompt, args.pages, args.template, use_web_research=args.web_research)
         
         print("\n" + "=" * 54)
         print("🎉 SUCCESS! Professional PDF report generated successfully!")
