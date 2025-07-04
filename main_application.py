@@ -5,6 +5,10 @@ import re
 from typing import Dict, Any, Optional
 import asyncio
 from datetime import datetime
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 # Import the content and visualization generators
 from report_planner import ReportPlanner, ReportType
@@ -20,12 +24,9 @@ from firecrawl_integration import FirecrawlReportGenerator
 class ProfessionalReportGenerator:
     """Orchestrates the AI-driven report generation with Typst."""
 
-    def __init__(self, gemini_api_key: Optional[str], firecrawl_api_key: Optional[str] = None):
+    def __init__(self, gemini_api_key: str, firecrawl_api_key: Optional[str] = None):
         self.report_planner = ReportPlanner(api_key=gemini_api_key)
-        # Initialize with default colors, will be updated based on template
         self.data_visualizer = PremiumVisualizationGenerator(brand_colors={"primary": "#0D203D", "accent": "#4A90E2"})
-        
-        # Initialize Firecrawl integration
         self.firecrawl_generator = FirecrawlReportGenerator(firecrawl_api_key, gemini_api_key) if firecrawl_api_key else None
 
     def _get_template_colors(self, template: str) -> Dict[str, str]:
@@ -75,15 +76,19 @@ class ProfessionalReportGenerator:
                 result = await self.firecrawl_generator.generate_report_from_web_research(
                     query=query,
                     page_count=page_count,
-                    report_type=ReportType.MARKET_RESEARCH
+                    report_type=ReportType.MARKET_RESEARCH,
+                    template=template
                 )
                 
-                if result["success"]:
-                    print(f"✅ Web research report generated: {result['pdf_path']}")
-                    print(f"💳 Credits used: {result['credits_used']}")
-                    return result['pdf_path']
+                if result.get("success", False):
+                    print(f"✅ Web research report generated: {result.get('pdf_path', 'Unknown')}")
+                    print(f"💳 Credits used: {result.get('credits_used', 0)}")
+                    if result.get("method") == "web_research":
+                        print(f"📊 Found {result.get('learnings_count', 0)} learnings from {result.get('sources_count', 0)} sources")
+                    return result.get('pdf_path', '')
                 else:
-                    print("❌ Web research failed, falling back to AI generation")
+                    print(f"❌ Web research failed: {result.get('error', 'Unknown error')}, falling back to AI generation")
+                    
             except Exception as e:
                 print(f"❌ Web research error: {e}, falling back to AI generation")
         
@@ -106,8 +111,12 @@ class ProfessionalReportGenerator:
             chart_type = section.get("chart_type")
             if chart_type and chart_type != "none":
                 print(f"  🎨 Generating '{chart_type}' chart for: {section['title']}...")
-                chart_path = self.data_visualizer.create_chart(section)
-                section["chart_path"] = chart_path
+                try:
+                    chart_path = self.data_visualizer.create_chart(section)
+                    section["chart_path"] = chart_path
+                except Exception as e:
+                    print(f"  ⚠️ Error generating chart for '{section['title']}': {e}")
+                    section["chart_path"] = ""
             else:
                 section["chart_path"] = ""
         
@@ -119,7 +128,11 @@ class ProfessionalReportGenerator:
     def _export_to_pdf(self, config: ReportConfig, blueprint: Dict[str, Any], template: str = "template_1") -> str:
         """Assembles data and calls the Typst renderer."""
         sanitized_title = re.sub(r'[\\/*?:"<>|]', "", config.title)
-        filename = f"./generated_reports/{sanitized_title[:50]}.pdf"
+        reports_dir = os.getenv("REPORTS_OUTPUT_DIR", "generated_reports")
+        filename = f"{reports_dir}/{sanitized_title[:50]}.pdf"
+        
+        # Ensure reports directory exists
+        os.makedirs(reports_dir, exist_ok=True)
         
         # Prepare the data dictionary for Typst
         sections = blueprint.get("sections", []) or []
@@ -161,6 +174,9 @@ class ProfessionalReportGenerator:
             "sections": sections
         }
         
+        # Get temp directory from environment
+        temp_dir = os.getenv("TEMP_DIR", "temp_charts")
+        
         # Adjust chart paths to be relative to the template directory
         for section in sections:
             if isinstance(section, dict):
@@ -168,7 +184,7 @@ class ProfessionalReportGenerator:
                 if chart_path and isinstance(chart_path, str) and chart_path != "":
                     print(f"  🔍 Debug - Original chart path: {chart_path}")
                     # Convert chart path to be relative to the template directory (like template 1)
-                    if chart_path.startswith("temp_charts/"):
+                    if chart_path.startswith(f"{temp_dir}/"):
                         section["chart_path"] = f"../{chart_path}"  # Go up one level from templates/ to find temp_charts/
                     elif os.path.isabs(chart_path):
                         # If it's an absolute path, make it relative to template directory

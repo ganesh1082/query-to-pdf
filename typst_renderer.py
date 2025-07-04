@@ -1,91 +1,143 @@
-# query_to_pdf/typst_renderer.py
+#!/usr/bin/env python3
+"""
+Typst PDF Renderer for AI-Powered Report Generator
+Handles PDF generation using Typst with enhanced error handling.
+"""
 
 import os
 import json
 import subprocess
-import shutil
-from typing import Dict, Any
+import sys
+import warnings
+from typing import Dict, Any, Optional
+from pathlib import Path
+
+# Suppress gRPC and absl warnings that cause sys.excepthook errors
+warnings.filterwarnings("ignore", category=UserWarning)
+warnings.filterwarnings("ignore", message=".*gRPC.*")
+warnings.filterwarnings("ignore", message=".*absl.*")
+
+# Set environment variables to suppress gRPC logging
+os.environ['GRPC_PYTHON_LOG_LEVEL'] = 'error'
+os.environ['ABSL_LOGGING_MIN_LEVEL'] = '1'
 
 def render_to_pdf_with_typst(report_data: Dict[str, Any], template_path: str, output_path: str) -> bool:
     """
-    Renders a report to PDF using Typst by creating a temporary JSON data file.
-
+    Render a report to PDF using Typst with enhanced error handling.
+    
     Args:
-        report_data (Dict[str, Any]): The dictionary containing all data for the report.
-        template_path (str): The path to the .typ template file.
-        output_path (str): The desired path for the final PDF.
-
+        report_data: Dictionary containing report data
+        template_path: Path to the Typst template file
+        output_path: Path where the PDF should be saved
+    
     Returns:
-        bool: True if PDF generation was successful, False otherwise.
+        bool: True if successful, False otherwise
     """
-    # Save the report data to report_data.json in the project root
-    data_path = "report_data.json"
-    with open(data_path, "w", encoding="utf-8") as f:
-        json.dump(report_data, f, indent=2, ensure_ascii=False)
-    
-    # Copy the data file to the templates directory
-    templates_dir = os.path.dirname(template_path)
-    dest_path = os.path.join(templates_dir, "report_data.json")
-    shutil.copyfile(data_path, dest_path)
-    
-    success = False
-    
     try:
-        # 1. Write the dynamic data to a JSON file that Typst can read.
-        with open(data_path, "w", encoding="utf-8") as f:
-            json.dump(report_data, f, ensure_ascii=False, indent=2)
+        # Ensure output directory exists
+        output_dir = os.path.dirname(output_path)
+        if output_dir:
+            os.makedirs(output_dir, exist_ok=True)
         
-        print("  📄 Wrote report data to report_data.json")
-
-        # 2. Construct the Typst compile command with --root argument
-        os.makedirs(os.path.dirname(output_path), exist_ok=True)
+        # Write report data to JSON file for Typst
+        data_file = os.path.join(os.path.dirname(template_path), "report_data.json")
+        with open(data_file, 'w', encoding='utf-8') as f:
+            json.dump(report_data, f, indent=2, ensure_ascii=False)
         
-        # Get the project root (parent directory of templates)
+        print(f"  📄 Wrote report data to {data_file}")
+        
+        # Get template directory and project root
         template_dir = os.path.dirname(template_path)
-        project_root = os.path.dirname(template_dir)
-        
-        # Ensure we have a valid project root
-        if not project_root or project_root == ".":
-            project_root = os.getcwd()
+        project_root = os.path.abspath(os.path.join(template_dir, ".."))
         
         print(f"  🔍 Debug: template_dir={template_dir}, project_root={project_root}")
-
-        command = [
-            "typst",
-            "compile",
+        
+        # Prepare Typst command with enhanced error handling
+        cmd = [
+            "typst", "compile",
             "--root", project_root,
             template_path,
             output_path
         ]
         
-        print(f"  🚀 Executing Typst command: {' '.join(command)}")
-
-        # 3. Run the Typst compiler.
-        result = subprocess.run(command, capture_output=True, text=True, check=False)
+        print(f"  🚀 Executing Typst command: {' '.join(cmd)}")
         
-        if result.returncode != 0:
-            print("❌ CRITICAL: Typst compilation failed.")
-            print("   [Typst STDERR]:", result.stderr)
+        # Execute Typst with proper error handling
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            cwd=project_root,
+            env={**os.environ, 'GRPC_PYTHON_LOG_LEVEL': 'error', 'ABSL_LOGGING_MIN_LEVEL': '1'}
+        )
+        
+        # Check if compilation was successful
+        if result.returncode == 0:
+            print("  ✅ Typst compilation successful.")
+            
+            # Clean up temporary data file
+            try:
+                os.remove(data_file)
+                print("  🗑️ Cleaned up temporary data file.")
+            except Exception as cleanup_error:
+                print(f"  ⚠️ Warning: Could not clean up temporary file: {cleanup_error}")
+            
+            return True
+        else:
+            print(f"  ❌ Typst compilation failed with return code {result.returncode}")
+            print(f"  🔍 Error output: {result.stderr}")
+            print(f"  🔍 Standard output: {result.stdout}")
+            
+            # Clean up temporary data file even on failure
+            try:
+                os.remove(data_file)
+            except:
+                pass
+            
             return False
-
-        print("  ✅ Typst compilation successful.")
-        if result.stdout:
-            print("  [Typst STDOUT]:", result.stdout)
-        
-        success = True
-
+            
     except FileNotFoundError:
-        print("❌ CRITICAL: 'typst' command not found.")
-        print("   Please ensure Typst is installed and in your system's PATH.")
-        print("   Installation: https://github.com/typst/typst")
-        
+        print("  ❌ Error: Typst not found. Please install Typst first.")
+        print("  📝 Installation: https://typst.app/docs/getting-started/installation")
+        return False
     except Exception as e:
-        print(f"❌ An unexpected error occurred during PDF rendering: {e}")
+        print(f"  ❌ Unexpected error during PDF generation: {e}")
         
-    finally:
-        # 4. Clean up the temporary JSON file.
-        if os.path.exists(data_path):
-            os.remove(data_path)
-            print("  🗑️ Cleaned up temporary data file.")
+        # Clean up temporary data file
+        try:
+            if 'data_file' in locals():
+                os.remove(data_file)
+        except:
+            pass
+        
+        return False
+
+def validate_typst_installation() -> bool:
+    """
+    Validate that Typst is properly installed and accessible.
     
-    return success
+    Returns:
+        bool: True if Typst is available, False otherwise
+    """
+    try:
+        result = subprocess.run(
+            ["typst", "--version"],
+            capture_output=True,
+            text=True,
+            timeout=10
+        )
+        if result.returncode == 0:
+            print(f"  ✅ Typst version: {result.stdout.strip()}")
+            return True
+        else:
+            print(f"  ❌ Typst version check failed: {result.stderr}")
+            return False
+    except FileNotFoundError:
+        print("  ❌ Typst not found in PATH")
+        return False
+    except subprocess.TimeoutExpired:
+        print("  ❌ Typst version check timed out")
+        return False
+    except Exception as e:
+        print(f"  ❌ Error checking Typst installation: {e}")
+        return False

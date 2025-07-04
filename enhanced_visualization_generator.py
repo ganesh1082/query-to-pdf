@@ -6,6 +6,10 @@ import seaborn as sns
 import os
 from typing import Dict, Any, Optional, List
 import warnings
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 warnings.simplefilter(action='ignore', category=FutureWarning)
 
@@ -29,7 +33,7 @@ class PremiumVisualizationGenerator:
         ]
         
         plt.style.use('seaborn-v0_8-whitegrid')
-        self.temp_dir = "temp_charts"
+        self.temp_dir = os.getenv("TEMP_DIR", "temp_charts")
         os.makedirs(self.temp_dir, exist_ok=True)
 
     def _adjust_color_brightness(self, hex_color: str, factor: float) -> str:
@@ -161,26 +165,39 @@ class PremiumVisualizationGenerator:
 
     def _save_plot_to_file(self, fig, filename: str) -> str:
         """Saves the Matplotlib figure to a file and returns the path."""
-        filepath = os.path.join(self.temp_dir, f"{filename}.png")
-        # Set transparent background
-        fig.patch.set_alpha(0.0)
-        fig.savefig(filepath, format='png', dpi=300, bbox_inches='tight', transparent=True)
-        plt.close(fig)
-        return filepath
+        try:
+            # Ensure temp directory exists
+            os.makedirs(self.temp_dir, exist_ok=True)
+            
+            filepath = os.path.join(self.temp_dir, f"{filename}.png")
+            # Set transparent background
+            fig.patch.set_alpha(0.0)
+            fig.savefig(filepath, format='png', dpi=300, bbox_inches='tight', transparent=True)
+            plt.close(fig)
+            return filepath
+        except Exception as e:
+            print(f"  ⚠️ Error saving chart to file: {e}")
+            plt.close(fig)  # Make sure to close the figure even if saving fails
+            return ""
 
     def _create_placeholder_chart(self, title: str) -> str:
         """Creates a placeholder image indicating missing data."""
-        fig, ax = plt.subplots(figsize=(10, 6))
-        # Set transparent background
-        fig.patch.set_alpha(0.0)
-        ax.patch.set_alpha(0.0)
-        ax.text(0.5, 0.5, "Data Not Available\nOr Malformed", ha='center', va='center', fontsize=18, color='#999')
-        ax.set_title(title, fontsize=14, fontweight='bold')
-        ax.grid(False)
-        ax.set_xticks([])
-        ax.set_yticks([])
-        safe_title = "".join(c for c in title if c.isalnum() or c in (' ', '-', '_')).rstrip().replace(' ', '_')
-        return self._save_plot_to_file(fig, f"placeholder_{safe_title}")
+        try:
+            fig, ax = plt.subplots(figsize=(10, 6))
+            # Set transparent background
+            fig.patch.set_alpha(0.0)
+            ax.patch.set_alpha(0.0)
+            ax.text(0.5, 0.5, "Data Not Available\nOr Malformed", ha='center', va='center', fontsize=18, color='#999')
+            ax.set_title(title, fontsize=14, fontweight='bold')
+            ax.grid(False)
+            ax.set_xticks([])
+            ax.set_yticks([])
+            safe_title = "".join(c for c in title if c.isalnum() or c in (' ', '-', '_')).rstrip().replace(' ', '_')
+            return self._save_plot_to_file(fig, f"placeholder_{safe_title}")
+        except Exception as e:
+            print(f"  ⚠️ Error creating placeholder chart: {e}")
+            # Return empty string if even placeholder creation fails
+            return ""
 
     def _get_palette(self, name: Optional[str]) -> str:
         """Returns a valid seaborn color palette name."""
@@ -197,9 +214,18 @@ class PremiumVisualizationGenerator:
         print(f"  🔍 Debug - Type: {chart_type}")
         print(f"  🔍 Debug - Data: {data}")
         
-        if not all([chart_type, data, title]):
-            print(f"  ⚠️ Missing required data: chart_type={chart_type}, data={data}, title={title}")
-            return self._create_placeholder_chart("Chart Data Missing")
+        # Enhanced validation with better error messages
+        if not chart_type or chart_type == "none":
+            print(f"  ⚠️ No chart type specified for: {title}")
+            return ""
+        
+        if not data or not isinstance(data, dict) or len(data) == 0:
+            print(f"  ⚠️ Missing or empty chart data for: {title}")
+            return self._create_placeholder_chart(f"Data Missing: {title}")
+        
+        if not title:
+            print(f"  ⚠️ Missing title for chart")
+            return self._create_placeholder_chart("Untitled Chart")
 
         safe_title = "".join(c for c in (title or "") if c.isalnum()).replace(' ', '_')[:30]
 
@@ -257,7 +283,8 @@ class PremiumVisualizationGenerator:
         if chart_type == "pareto":
             return self._create_pareto_chart(data, title, safe_title)
         
-        return self._create_placeholder_chart(f"Unsupported Chart: {chart_type}")
+        print(f"  ⚠️ Unsupported chart type: {chart_type}")
+        return self._create_placeholder_chart(f"Unsupported: {chart_type}")
 
     def _create_bar_chart(self, data, title, palette, chart_type, safe_title):
         labels, values = data.get("labels", []), data.get("values", [])

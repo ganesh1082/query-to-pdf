@@ -1,4 +1,4 @@
-// A modern 2-column Typst template for professional reports.
+// A dynamic 2-column Typst template for professional reports with intelligent content flow.
 
 // Data import from the JSON file created by the Python script.
 #let data = json("report_data.json")
@@ -15,7 +15,6 @@
 )
 
 // Define a font scheme with IBM Plex Mono for titles and Trebuchet MS for body.
-// Using system fonts with fallbacks for better availability
 #let fonts = (
   body: ("Trebuchet MS", "Arial", "Helvetica", "sans-serif"),
   heading: ("IBM Plex Mono", "Courier New", "monospace"),
@@ -67,16 +66,12 @@
 
 #let cover_page(title, subtitle, author, company, date, logo_path) = {
   align(center)[
-    // Display logo if available - separated from other elements
-
+    // Display logo if available
     #image(logo_path, width: 3cm)
-    
     
     #text(font: fonts.heading, weight: "bold", size: 28pt, fill: colors.primary)[#title.replace("_", " ")]
 
     #text(font: fonts.body, size: 16pt, fill: colors.secondary)[#subtitle]
-    
-
   ]
     
   line(length: 100%, stroke: 1pt + colors.accent)
@@ -97,46 +92,39 @@
   pagebreak()
 }
 
-// --- 6. TWO-COLUMN LAYOUT FUNCTION ---
+// --- 6. TWO-COLUMN LAYOUT FUNCTIONS ---
 
+// Function to render a section with 2-column layout
 #let two_column_section(title, content, chart_path, chart_type, is_last: false) = {
   heading(title)
-
-  // Create a grid layout with two rows: first half for text, second half for visuals
-  grid(
-    rows: (1fr, 1fr),  // Split page into two equal halves
-    gutter: 20pt,
-    align: (left, left),
-    
-    // First half: Two-column text layout (top half of page)
-    columns(2)[
-      #raw(content)
-    ],
-    
-    // Second half: Chart/visuals area (bottom half of page)
-    if chart_path != "" and chart_path != none and chart_type != "none" {
-      v(1em)
+  
+  // Check if we have a chart to display
+  let has_chart = chart_path != "" and chart_path != none and chart_type != "none"
+  
+  if has_chart {
+    // Layout with chart: content on left, chart on right
+    grid(
+      columns: (1fr, 1fr),
+      gutter: 20pt,
+      align: (left, center),
+      
+      // Left column: Content
+      text(content),
+      
+      // Right column: Chart
       figure(
-        image(chart_path, width: 70%),
+        image(chart_path, width: 90%),
         caption: "Visualization for: " + title
       )
-
-    } else if chart_type == "none" {
-      // For sections intentionally without charts, leave the second half empty
-      align(center)[
-        // Empty space for sections that don't need charts
-      ]
-    } else {
-      // If chart is missing due to error, show placeholder
-      align(center)[
-        text(fill: colors.secondary.lighten(30%), style: "italic")[
-          Chart not available for: #title
-        ]
-      ]
-    }
-  )
-
-  // Only add page break if this is not the last section
+    )
+  } else {
+    // Layout without chart: content in 2 columns
+    columns(2)[
+      text(content)
+    ]
+  }
+  
+  // Add page break if not the last section
   if not is_last {
     pagebreak()
   }
@@ -162,7 +150,7 @@
 )
 #pagebreak()
 
-// Generate sections from data with 2-column layout
+// Generate sections with 2-column layout
 #for (i, section) in data.sections.enumerate() {
   two_column_section(
     section.title,

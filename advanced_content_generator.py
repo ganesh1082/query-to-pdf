@@ -4,35 +4,60 @@ import os
 import json
 from typing import Dict, Any, Optional
 from enum import Enum
-import google.generativeai as genai
 import re
+import google.generativeai as genai
 
 class ReportType(Enum):
     MARKET_RESEARCH = "market_research"
 
 class ReportConfig:
-    def __init__(self, title: str, subtitle: str, author: str, company: str, report_type: ReportType, target_audience: str, brand_colors: Dict[str, str], logo_path: Optional[str] = None):
+    def __init__(self, title: str, subtitle: str, author: str, company: str, report_type: ReportType, target_audience: str, brand_colors: Optional[Dict[str, str]] = None, logo_path: Optional[str] = None):
         self.title = title
         self.subtitle = subtitle
         self.author = author
         self.company = company
         self.report_type = report_type
         self.target_audience = target_audience
-        self.brand_colors = brand_colors
+        self.brand_colors = brand_colors or {}
         self.logo_path = logo_path
 
 class AdvancedContentGenerator:
     """An AI-driven generator that creates a unified blueprint for an entire report."""
     
-    def __init__(self, api_key: Optional[str]):
+    def __init__(self, api_key: str):
         self.model: Optional[Any] = None
         if api_key:
             try:
                 genai.configure(api_key=api_key)
-                self.model = genai.GenerativeModel('gemini-2.5-flash')
+                model_version = os.getenv('GEMINI_MODEL_VERSION', 'gemini-2.0-flash')
+                self.model = genai.GenerativeModel(model_version)
             except Exception as e:
                 print(f"⚠️ Could not configure Gemini. Error: {e}")
                 self.model = None
+
+    def _get_chart_catalog(self) -> Dict[str, Any]:
+        """
+        Pull the live chart catalog from `visuals.charts`.
+        Falls back to a flat list if the module is missing.
+        """
+        try:
+            from visuals.charts import get_chart_catalog
+            catalog = get_chart_catalog()
+            if catalog:
+                return catalog
+        except Exception as e:
+            print(f"  ⚠️ Could not load chart catalog: {e}")
+        
+        # Fallback: wrap legacy list in minimal metadata
+        legacy_types = [
+            "bar", "line", "pie", "donut", "scatter", "area",
+            "stackedBar", "multiLine", "radar", "bubble", "heatmap",
+            "waterfall", "funnel", "gauge", "treeMap", "sunburst",
+            "candlestick", "boxPlot", "violinPlot", "histogram",
+            "pareto", "flowchart", "none",
+        ]
+        return {t: {"goal": "generic", "dims": "nD", "complexity": "medium"}
+                for t in legacy_types}
 
     async def generate_full_report_blueprint(self, query: str, page_count: int) -> Optional[Dict[str, Any]]:
         """Generates a complete report blueprint including titles, chart data, and narrative content."""
@@ -41,64 +66,60 @@ class AdvancedContentGenerator:
             return self._get_mock_report_blueprint(query)
 
         num_sections = max(8, min(14, int(page_count / 1.5)))
+        
+        # Get dynamic chart catalog
+        chart_catalog = self._get_chart_catalog()
+        chart_names_str = "|".join(chart_catalog.keys())
+        charts_json = json.dumps(chart_catalog, indent=2)
 
         prompt = f"""
-You are a professional market research analyst. Create a comprehensive {page_count}-page report on: "{query}"
+Act as a team of senior strategy consultants from a top-tier firm like McKinsey, BCG, or Kearney. Your task is to create a complete, in-depth, and data-driven professional report of approximately {page_count} pages. The report is market research on the topic of: "{query}". The target audience is senior executives and decision makers.
 
-CRITICAL INSTRUCTIONS:
-1. Output ONLY valid JSON wrapped in ```json ... ``` blocks
-2. Do not include any text before or after the JSON
-3. Ensure all JSON is properly formatted with correct commas and quotes
-4. Use exactly {num_sections} sections
+Your output MUST be a single, complete, and well-formed JSON object, ready for parsing.
 
-REQUIRED JSON STRUCTURE:
-{{
-  "sections": [
-    {{
-      "title": "Executive Summary",
-      "content": "250-400 words of detailed analysis...",
-      "chart_type": "none",
-      "chart_data": {{}}
-    }},
-    {{
-      "title": "Section Title",
-      "content": "250-400 words of detailed analysis...",
-      "chart_type": "bar",
-      "chart_data": {{"labels": ["A", "B", "C"], "values": [10, 20, 30]}}
-    }}
-  ]
-}}
+The JSON object must adhere to this exact structure:
+- A root object with a single key: "sections".
+- The "sections" key must contain a list of exactly {num_sections} section objects.
 
-SECTION REQUIREMENTS:
-- First section: "Executive Summary" (chart_type: "none")
-- Last two sections: "Strategic Recommendations" and "Risk Assessment" (chart_type: "none")
-- Each section: 250-400 words using Typst markdown (**bold** for headings, `-` for bullets)
-- Use diverse chart types: "bar", "line", "pie", "donut", "scatter", "horizontalBar", "none"
+Each section object in the list MUST contain the following four keys:
+1.  "title": A relevant, insightful, and professional title for the section.
+2.  "content": A detailed, well-structured narrative (250-400 words) using Typst-friendly markdown. Use `**bold text**` for subheadings or emphasis, and `-` for bullet points. The narrative MUST provide context and analysis for the 'chart_data'.
+3.  "chart_type": The most effective chart type to visualize the section's data. Choose from a diverse mix of available chart types. Use "none" only for text-heavy sections.
+4.  "chart_data": A JSON object containing plausible, realistic data that supports the 'content'.
+    - For "bar", "line", "pie", "donut", "horizontalBar": Use the format `{{"labels": ["A", "B"], "values": [10, 20]}}`.
+    - For "scatter": Use the format `{{"x_values": [1, 2], "y_values": [10, 20], "sizes": [100, 200]}}`.
+    - For "none" chart_type, use an empty object: `{{}}`.
 
-CHART DATA FORMATS (copy exactly):
-- Single series: {{"labels": ["A", "B", "C"], "values": [10, 20, 30]}}
-- Multi-series line: {{"labels": ["2020", "2021", "2022"], "series": [{{"name": "Series1", "values": [10, 15, 20]}}, {{"name": "Series2", "values": [5, 12, 18]}}]}}
-- Scatter: {{"points": [{{"x": 1, "y": 2, "name": "P1"}}, {{"x": 3, "y": 4, "name": "P2"}}]}}
-- Empty: {{}}
+**Report Structure and Content Requirements:**
 
-JSON VALIDATION RULES:
-- Every object must end with }}
-- Every array must end with ]
-- Every property must be followed by a comma except the last one
-- All strings must be in double quotes
-- No trailing commas before }} or ]
+-   **Section 1: Executive Summary.** This MUST be the first section. It should synthesize the entire report's findings and recommendations. `chart_type` must be "none".
+-   **Core Analysis Sections:** The middle sections should follow a logical flow, such as:
+    -   Introduction / Problem Landscape
+    -   Key Market Drivers & Trends
+    -   Data-Driven Analysis (e.g., Market Sizing, Competitive Landscape, Consumer Behavior)
+    -   Strategic Frameworks or Case Studies
+-   **Final Sections:** The report MUST conclude with the following sections, in order:
+    -   "Strategic Recommendations" (`chart_type`: "none")
+    -   "Risk Assessment & Mitigation" (`chart_type`: "none")
 
-OUTPUT FORMAT:
-```json
-{{YOUR_JSON_HERE}}
-```
+Ensure all generated data is plausible and all content is professionally written, analytical, and insightful, suitable for the target audience.
+
+AVAILABLE_CHARTS_METADATA:
+{charts_json}
+
+AVAILABLE_CHART_TYPES: {chart_names_str}
+
+OUTPUT ONLY THE COMPLETE JSON OBJECT, WRAPPED IN ```json ... ```. DO NOT INCLUDE ANY OTHER TEXT, EXPLANATION, OR APOLOGIES.
 """
         
         try:
             print(f"  🧠 Generating full {num_sections}-section report blueprint with Gemini...")
             print(f"  🔍 Using API key: {self.model.api_key[:10]}..." if hasattr(self.model, 'api_key') else "  🔍 API key configured")
             
-            generation_config = genai.types.GenerationConfig(temperature=0.6, max_output_tokens=8192)
+            generation_config = genai.types.GenerationConfig(
+                temperature=float(os.getenv('GEMINI_TEMPERATURE', 0.6)),
+                max_output_tokens=int(os.getenv('GEMINI_MAX_OUTPUT_TOKENS', 8192))
+            )
             response = await self.model.generate_content_async(prompt, generation_config=generation_config)
             
             print(f"  🔍 AI Response received, length: {len(response.text)} characters")
