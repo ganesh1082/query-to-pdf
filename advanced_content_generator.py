@@ -73,7 +73,7 @@ class AdvancedContentGenerator:
         charts_json = json.dumps(chart_catalog, indent=2)
 
         prompt = f"""
-Act as a team of senior strategy consultants from a top-tier firm like McKinsey, BCG, or Kearney. Your task is to create a complete, in-depth, and data-driven professional report of approximately {page_count} pages. The report is market research on the topic of: "{query}". The target audience is senior executives and decision makers.
+Act as a team of senior strategy consultants from a top-tier firm like McKinsey, BCG, or Kearney. Your task is to create a complete, comprehensive, in-depth, and data-driven professional report of approximately {page_count} pages. The report is market research on the topic of: "{query}". The target audience is senior executives and decision makers.
 
 Your output MUST be a single, complete, and well-formed JSON object, ready for parsing.
 
@@ -83,7 +83,7 @@ The JSON object must adhere to this exact structure:
 
 Each section object in the list MUST contain the following four keys:
 1.  "title": A relevant, insightful, and professional title for the section.
-2.  "content": A detailed, well-structured narrative (250-400 words) using Typst-friendly markdown. Use `**bold text**` for subheadings or emphasis, and `-` for bullet points. The narrative MUST provide context and analysis for the 'chart_data'.
+2.  "content": A comprehensive, detailed, well-structured narrative (600-1000 words) using Typst-friendly markdown. Use `**bold text**` for subheadings or emphasis, and `-` for bullet points. The narrative MUST provide extensive context, detailed analysis, strategic insights, and comprehensive coverage of the topic. Include detailed market analysis, competitive landscape, industry trends, case studies, quantitative insights, and strategic frameworks.
 3.  "chart_type": The most effective chart type to visualize the section's data. Choose from a diverse mix of available chart types. Use "none" only for text-heavy sections.
 4.  "chart_data": A JSON object containing plausible, realistic data that supports the 'content'.
     - For "bar", "line", "pie", "donut", "horizontalBar": Use the format `{{"labels": ["A", "B"], "values": [10, 20]}}`.
@@ -92,15 +92,26 @@ Each section object in the list MUST contain the following four keys:
 
 **Report Structure and Content Requirements:**
 
--   **Section 1: Executive Summary.** This MUST be the first section. It should synthesize the entire report's findings and recommendations. `chart_type` must be "none".
+-   **Section 1: Executive Summary.** This MUST be the first section. It should provide a comprehensive synthesis of the entire report's findings, strategic insights, and recommendations. Include detailed market overview, key trends, competitive dynamics, and strategic implications. `chart_type` must be "none".
 -   **Core Analysis Sections:** The middle sections should follow a logical flow, such as:
-    -   Introduction / Problem Landscape
-    -   Key Market Drivers & Trends
-    -   Data-Driven Analysis (e.g., Market Sizing, Competitive Landscape, Consumer Behavior)
-    -   Strategic Frameworks or Case Studies
+    -   Introduction / Problem Landscape (comprehensive market overview and problem definition)
+    -   Key Market Drivers & Trends (detailed analysis of market forces and emerging trends)
+    -   Data-Driven Analysis (e.g., Market Sizing, Competitive Landscape, Consumer Behavior, Financial Performance)
+    -   Strategic Frameworks or Case Studies (detailed application of business frameworks and real-world examples)
+    -   Technology and Innovation Analysis (if applicable)
+    -   Regulatory and Policy Environment (if applicable)
 -   **Final Sections:** The report MUST conclude with the following sections, in order:
-    -   "Strategic Recommendations" (`chart_type`: "none")
-    -   "Risk Assessment & Mitigation" (`chart_type`: "none")
+    -   "Strategic Recommendations" (`chart_type`: "none") - Comprehensive actionable roadmap with detailed implementation guidance
+    -   "Risk Assessment & Mitigation" (`chart_type`: "none") - Detailed risk analysis with mitigation strategies
+
+**Content Quality Requirements:**
+- Each section must be comprehensive and thorough, providing substantial depth and analysis
+- Include detailed market insights, competitive analysis, and strategic implications
+- Provide extensive supporting evidence and data-driven insights
+- Use professional business language suitable for C-suite executives
+- Include quantitative analysis, statistical insights, and trend analysis
+- Provide comprehensive case studies and real-world examples where applicable
+- Apply strategic frameworks (PESTLE, Porter's Five Forces, SWOT, etc.) in detail
 
 Ensure all generated data is plausible and all content is professionally written, analytical, and insightful, suitable for the target audience.
 

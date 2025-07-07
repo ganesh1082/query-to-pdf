@@ -2,6 +2,7 @@
 """
 AI-Powered Report Generator v2.1 (Typst Edition)
 Generates professional AI-driven research reports using Google's Gemini API and Typst for PDF rendering.
+Uses FIRECRAWL_API_URL from .env for web research (no API key required).
 """
 
 import os
@@ -11,6 +12,7 @@ import argparse
 import traceback
 import signal
 import atexit
+import json
 from datetime import datetime
 from dotenv import load_dotenv, find_dotenv
 
@@ -31,10 +33,13 @@ os.environ['ABSL_LOGGING_MIN_LEVEL'] = '1'
 # Force reload environment variables
 def reload_environment():
     """Force reload environment variables from .env file"""
+    print("🔄 Loading environment variables...")
+    
     # Clear any existing environment variables that might be cached
     keys_to_clear = [
         'GEMINI_API_KEY', 'FIRECRAWL_API_KEY', 'OPENAI_API_KEY',
-        'FIRECRAWL_RESEARCH_BREADTH', 'FIRECRAWL_RESEARCH_DEPTH'
+        'FIRECRAWL_RESEARCH_BREADTH', 'FIRECRAWL_RESEARCH_DEPTH',
+        'FIRECRAWL_API_URL'
     ]
     
     for key in keys_to_clear:
@@ -45,7 +50,17 @@ def reload_environment():
     env_file = find_dotenv()
     if env_file:
         load_dotenv(env_file, override=True)
-        print(f"🔄 Environment reloaded from: {env_file}")
+        print(f"✅ Environment loaded from: {env_file}")
+        
+        # Debug environment variables
+        print("🔍 Environment Debug Info:")
+        print(f"   GEMINI_API_KEY: {'✅ Set' if os.getenv('GEMINI_API_KEY') else '❌ Not set'}")
+        print(f"   FIRECRAWL_API_URL: {'✅ Set' if os.getenv('FIRECRAWL_API_URL') else '❌ Not set'}")
+        if os.getenv('FIRECRAWL_API_URL'):
+            print(f"   FIRECRAWL_API_URL value: {os.getenv('FIRECRAWL_API_URL')}")
+        print(f"   FIRECRAWL_API_KEY: {'✅ Set' if os.getenv('FIRECRAWL_API_KEY') else '❌ Not set (not needed)'}")
+    else:
+        print("❌ No .env file found")
 
 # Global cleanup flag
 _cleanup_done = False
@@ -125,42 +140,56 @@ def get_next_report_number() -> str:
 
 async def main():
     """Main async function"""
+    print("🚀 AI-Powered Report Generator v2.1 (Typst Edition)")
+    print("=" * 60)
+    print("🌐 Using FIRECRAWL_API_URL for web research (no API key required)")
+    print("=" * 60)
+    
     # Reload environment at startup
     reload_environment()
     
     parser = argparse.ArgumentParser(description="AI-Powered Report Generator")
     parser.add_argument("--prompt", required=True, help="Research topic or prompt")
-    parser.add_argument("--template", default="template_1", help="Template to use (template_0, template_1, template_2)")
-    parser.add_argument("--web-research", action="store_true", help="Enable web research using Firecrawl")
-    parser.add_argument("--breadth", type=int, default=4, help="Research breadth (number of initial queries)")
-    parser.add_argument("--depth", type=int, default=2, help="Research depth (number of follow-up levels)")
     
     args = parser.parse_args()
     
-    print("🚀 AI-Powered Report Generator v2.1 (Typst Edition)")
-    print("=" * 54)
-    print(f"  Prompt: {args.prompt}")
-    print(f"  Template: {args.template}")
-    print(f"  Web Research: {'Yes' if args.web_research else 'No'}")
-    print("=" * 54)
+    # Get configuration from environment variables
+    prompt = args.prompt
+    template = os.getenv('REPORT_TEMPLATE', 'template_1')
+    web_research = os.getenv('WEB_RESEARCH', 'true').lower() == 'true'
+    breadth = int(os.getenv('RESEARCH_BREADTH', '4'))
+    depth = int(os.getenv('RESEARCH_DEPTH', '2'))
+    
+    print("📋 Report Configuration:")
+    print(f"   Prompt: {prompt}")
+    print(f"   Template: {template}")
+    print(f"   Web Research: {'✅ Enabled' if web_research else '❌ Disabled'}")
+    if web_research:
+        print(f"   Research Breadth: {breadth}")
+        print(f"   Research Depth: {depth}")
+    print("=" * 60)
     
     # Get API keys
     gemini_api_key = os.getenv('GEMINI_API_KEY')
-    firecrawl_api_key = os.getenv('FIRECRAWL_API_KEY')
+    firecrawl_api_url = os.getenv('FIRECRAWL_API_URL')
     
     if not gemini_api_key:
         print("❌ Error: GEMINI_API_KEY not found in environment variables")
+        print("   Please set GEMINI_API_KEY in your .env file")
         sys.exit(1)
     
-    if args.web_research and not firecrawl_api_key:
-        print("❌ Error: FIRECRAWL_API_KEY not found in environment variables")
+    if web_research and not firecrawl_api_url:
+        print("❌ Error: FIRECRAWL_API_URL not found in environment variables")
+        print("   Please set FIRECRAWL_API_URL in your .env file for web research")
         sys.exit(1)
     
     # Debug API key info
-    print("🔑 API Key Debug Info:")
-    print(f"  GEMINI_API_KEY: {gemini_api_key[:10]}...{gemini_api_key[-5:]} ✅")
-    if firecrawl_api_key:
-        print(f"  FIRECRAWL_API_KEY: {firecrawl_api_key[:10]}...{firecrawl_api_key[-5:]} ✅")
+    print("🔑 API Configuration:")
+    print(f"   GEMINI_API_KEY: {gemini_api_key[:10]}...{gemini_api_key[-5:]} ✅")
+    if firecrawl_api_url:
+        print(f"   FIRECRAWL_API_URL: {firecrawl_api_url} ✅")
+    else:
+        print(f"   FIRECRAWL_API_URL: Not set - web research disabled")
     
     # Get company/branding info from .env
     company_name = os.getenv("COMPANY_NAME", "Ubik Enterprise")
@@ -169,12 +198,18 @@ async def main():
     logo_path = os.getenv("COMPANY_LOGO_PATH", "assets/logo.png")
     
     report_num = get_next_report_number()
-    report_title_safe = args.prompt[:40].replace(' ', '_').replace(',', '')
+    report_title_safe = prompt[:40].replace(' ', '_').replace(',', '')
+    
+    print("📄 Report Details:")
+    print(f"   Report Number: {report_num}")
+    print(f"   Company: {company_name}")
+    print(f"   Author: {author}")
+    print(f"   Logo Path: {logo_path}")
     
     # Create configuration
     config = ReportConfig(
         title=f"{report_num}_{report_title_safe}",
-        subtitle=f"A Strategic Analysis of: {args.prompt}",
+        subtitle=f"A Strategic Analysis of: {prompt}",
         author=author,
         company=organization,
         report_type=ReportType.MARKET_RESEARCH,
@@ -184,22 +219,54 @@ async def main():
     )
     
     try:
-        generator = ProfessionalReportGenerator(gemini_api_key=gemini_api_key, firecrawl_api_key=firecrawl_api_key)
-        output_file = await generator.generate_comprehensive_report(config, args.prompt, 8, args.template, use_web_research=args.web_research)
+        print("\n🔧 Initializing report generator...")
+        generator = ProfessionalReportGenerator(gemini_api_key=gemini_api_key)
         
-        print("\n" + "=" * 54)
-        print("🎉 SUCCESS! Professional PDF report generated successfully!")
-        print(f"📁 Output File: {output_file}")
-        print("=" * 54)
+        print("🎯 Starting report generation...")
+        result = await generator.generate_comprehensive_report(
+            config, 
+            prompt, 
+            8, 
+            template, 
+            use_web_research=web_research
+        )
+        
+        output_file = result.get("pdf_path", "")
+        report_data = result.get("report_data", {})
+        
+        # Save JSON report
+        json_reports_dir = os.getenv("JSON_REPORTS_OUTPUT_DIR", "json_reports")
+        os.makedirs(json_reports_dir, exist_ok=True)
+        json_filename = f"{report_num}_{report_title_safe}.json"
+        json_output_path = os.path.join(json_reports_dir, json_filename)
+        
+        if report_data:
+            with open(json_output_path, 'w', encoding='utf-8') as f:
+                json.dump(report_data, f, indent=2, ensure_ascii=False)
+            print(f"📄 JSON Report: {json_output_path}")
+        
+        print("\n" + "=" * 60)
+        print("🎉 SUCCESS! Professional reports generated successfully!")
+        print(f"📁 PDF File: {output_file}")
+        print(f"📄 JSON File: {json_output_path}")
+        
+        # Show additional info if available
+        if "requests_used" in result:
+            print(f"🌐 Web Research: {result.get('requests_used', 0)} requests used")
+        if "learnings_count" in result:
+            print(f"📚 Learnings: {result.get('learnings_count', 0)} found")
+        if "sources_count" in result:
+            print(f"🔗 Sources: {result.get('sources_count', 0)} found")
+        
+        print("=" * 60)
         
         # Cleanup and exit gracefully
         cleanup_and_exit()
-
+        
     except Exception as e:
-        print(f"\n❌ An unexpected error occurred: {e}")
-        print("🔍 Error details:")
-        traceback.print_exc()
-        cleanup_and_exit()
+        print(f"\n❌ Report generation failed: {e}")
+        print(f"   Traceback: {traceback.format_exc()}")
+        sys.exit(1)
 
 def run_main():
     """Wrapper to run the async main function."""

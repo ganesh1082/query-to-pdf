@@ -2,7 +2,7 @@
 
 import os
 import re
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 import asyncio
 from datetime import datetime
 from dotenv import load_dotenv
@@ -24,10 +24,18 @@ from firecrawl_integration import FirecrawlReportGenerator
 class ProfessionalReportGenerator:
     """Orchestrates the AI-driven report generation with Typst."""
 
-    def __init__(self, gemini_api_key: str, firecrawl_api_key: Optional[str] = None):
+    def __init__(self, gemini_api_key: str):
         self.report_planner = ReportPlanner(api_key=gemini_api_key)
         self.data_visualizer = PremiumVisualizationGenerator(brand_colors={"primary": "#0D203D", "accent": "#4A90E2"})
-        self.firecrawl_generator = FirecrawlReportGenerator(firecrawl_api_key, gemini_api_key) if firecrawl_api_key else None
+        
+        # Initialize Firecrawl generator (no API key needed, uses FIRECRAWL_API_URL from .env)
+        self.firecrawl_generator: Optional[FirecrawlReportGenerator] = None
+        try:
+            self.firecrawl_generator = FirecrawlReportGenerator(gemini_api_key)
+            print("✅ Firecrawl generator initialized successfully")
+        except Exception as e:
+            print(f"⚠️ Firecrawl generator initialization failed: {e}")
+            self.firecrawl_generator = None
 
     def _get_template_colors(self, template: str) -> Dict[str, str]:
         """Extract color palette from the specified template."""
@@ -67,31 +75,46 @@ class ProfessionalReportGenerator:
         
         return content
 
-    async def generate_comprehensive_report(self, config: ReportConfig, query: str, page_count: int, template: str = "template_1", use_web_research: bool = False) -> str:
-        
-        # Check if we should use web research
+    async def generate_comprehensive_report(self, config: ReportConfig, query: str, page_count: int, template: str = "template_1", use_web_research: bool = False) -> Dict[str, Any]:
+        # If web research is requested, try Firecrawl first and print debug info before planner
         if use_web_research and self.firecrawl_generator:
-            print("\n🌐 Using real-time web research with Firecrawl...")
-            try:
+            print("\n🔍 Attempting Firecrawl research before planner...")
+            research_result = await self.firecrawl_generator.firecrawl_research.deep_research(query)
+            print(f"[DEBUG] Firecrawl research result: {research_result}")
+            if research_result.get("learnings"):
+                print("[DEBUG] Using Firecrawl learnings for report generation.")
+                # Use the rest of the web research pipeline as before
                 result = await self.firecrawl_generator.generate_report_from_web_research(
                     query=query,
                     page_count=page_count,
                     report_type=ReportType.MARKET_RESEARCH,
                     template=template
                 )
-                
                 if result.get("success", False):
                     print(f"✅ Web research report generated: {result.get('pdf_path', 'Unknown')}")
-                    print(f"💳 Credits used: {result.get('credits_used', 0)}")
+                    print(f"🌐 Requests used: {result.get('requests_used', 0)}")
                     if result.get("method") == "web_research":
                         print(f"📊 Found {result.get('learnings_count', 0)} learnings from {result.get('sources_count', 0)} sources")
-                    return result.get('pdf_path', '')
+                    blueprint = result.get('blueprint', {})
+                    report_data = {
+                        "title": config.title,
+                        "subtitle": config.subtitle,
+                        "author": config.author,
+                        "company": config.company,
+                        "logo_path": config.logo_path,
+                        "date": datetime.now().strftime('%B %d, %Y'),
+                        "sections": blueprint.get("sections", []),
+                        "learnings": result.get("learnings", []),
+                        "sources": result.get("sources", [])
+                    }
+                    return {
+                        "pdf_path": result.get('pdf_path', ''),
+                        "report_data": report_data
+                    }
                 else:
                     print(f"❌ Web research failed: {result.get('error', 'Unknown error')}, falling back to AI generation")
-                    
-            except Exception as e:
-                print(f"❌ Web research error: {e}, falling back to AI generation")
-        
+            else:
+                print("⚠️ No learnings from Firecrawl, falling back to planner.")
         # Fallback to AI-generated content
         print("\n🤖 Phase 1: AI is designing the full report blueprint...")
         report_blueprint = await self.report_planner.generate_report_blueprint(query, page_count, ReportType.MARKET_RESEARCH)
@@ -123,9 +146,23 @@ class ProfessionalReportGenerator:
         print("\n🚀 Phase 3: Compiling the final PDF report with Typst...")
         output_filename = self._export_to_pdf(config, report_blueprint, template)
         
-        return output_filename
+        # Prepare the report data that was used for PDF generation
+        report_data = {
+            "title": config.title,
+            "subtitle": config.subtitle,
+            "author": config.author,
+            "company": config.company,
+            "logo_path": config.logo_path,
+            "date": datetime.now().strftime('%B %d, %Y'),
+            "sections": report_blueprint.get("sections", [])
+        }
+        
+        return {
+            "pdf_path": output_filename,
+            "report_data": report_data
+        }
 
-    def _export_to_pdf(self, config: ReportConfig, blueprint: Dict[str, Any], template: str = "template_1") -> str:
+    def _export_to_pdf(self, config: ReportConfig, blueprint: Dict[str, Any], template: str = "template_1", learnings: Optional[List[str]] = None, sources: Optional[List[Dict[str, Any]]] = None) -> str:
         """Assembles data and calls the Typst renderer."""
         sanitized_title = re.sub(r'[\\/*?:"<>|]', "", config.title)
         reports_dir = os.getenv("REPORTS_OUTPUT_DIR", "generated_reports")
@@ -171,7 +208,9 @@ class ProfessionalReportGenerator:
             "company": config.company,
             "logo_path": logo_path,
             "date": datetime.now().strftime('%B %d, %Y'),
-            "sections": sections
+            "sections": sections,
+            "learnings": learnings or [],
+            "sources": sources or []
         }
         
         # Get temp directory from environment

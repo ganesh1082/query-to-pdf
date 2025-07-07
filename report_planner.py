@@ -129,7 +129,7 @@ class ReportPlanner:
         chart_types_str = "|".join(available_chart_types + ["none"])
         
         # Calculate target content length per section - INCREASED for more comprehensive content
-        target_words_per_section = max(900, int((page_count * 1000) / num_sections))  # 900-1000 words per section
+        target_words_per_section = max(1200, int((page_count * 1200) / num_sections))  # 1200-1500 words per section
         
         # Build chart catalog documentation for the prompt
         chart_docs = []

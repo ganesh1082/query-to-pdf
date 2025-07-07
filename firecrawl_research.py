@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
 Firecrawl Research Module - Real-time web scraping and AI-powered report generation
+Uses FIRECRAWL_API_URL from .env for direct URL access (no API key required)
 """
 
 import os
@@ -15,6 +16,7 @@ import google.generativeai as genai
 from datetime import datetime
 import re
 from dotenv import load_dotenv
+import traceback
 
 # Load environment variables from .env file
 load_dotenv()
@@ -55,12 +57,20 @@ class ResearchProgress:
 
 
 class FirecrawlResearch:
-    """Real-time web research using Firecrawl and Gemini"""
+    """Real-time web research using Firecrawl URL and Gemini"""
     
-    def __init__(self, firecrawl_api_key: Optional[str] = None, gemini_api_key: Optional[str] = None):
-        """Initialize with API keys"""
-        self.firecrawl_api_key = firecrawl_api_key or os.getenv('FIRECRAWL_API_KEY')
+    def __init__(self, gemini_api_key: Optional[str] = None):
+        """Initialize with Gemini API key only (no Firecrawl API key needed)"""
         self.gemini_api_key = gemini_api_key or os.getenv('GEMINI_API_KEY')
+        
+        # Get Firecrawl URL from environment
+        self.firecrawl_api_url = os.getenv('FIRECRAWL_API_URL')
+        if not self.firecrawl_api_url:
+            print("❌ ERROR: FIRECRAWL_API_URL not found in environment variables")
+            print("   Please set FIRECRAWL_API_URL in your .env file")
+            raise ValueError("FIRECRAWL_API_URL is required")
+        
+        print(f"🌐 Firecrawl URL configured: {self.firecrawl_api_url}")
         
         # Initialize Gemini
         self.gemini_model: Optional[Any] = None
@@ -72,32 +82,28 @@ class FirecrawlResearch:
                 print(f"✅ Gemini API initialized ({model_version})")
             except Exception as e:
                 print(f"❌ Failed to initialize Gemini: {e}")
+        else:
+            print("❌ ERROR: GEMINI_API_KEY not found in environment variables")
+            raise ValueError("GEMINI_API_KEY is required")
         
-        # Rate limiting for Firecrawl
+        # Rate limiting for Firecrawl URL access
         self.rate_limits = {
             'search': {
                 'limit': int(os.getenv('FIRECRAWL_RATE_LIMIT_SEARCH', 50)), 
                 'window': int(os.getenv('FIRECRAWL_RATE_LIMIT_WINDOW', 60000)), 
                 'requests': 0, 
                 'reset_time': 0.0
-            },
-            'scrape': {
-                'limit': int(os.getenv('FIRECRAWL_RATE_LIMIT_SCRAPE', 100)), 
-                'window': int(os.getenv('FIRECRAWL_RATE_LIMIT_WINDOW', 60000)), 
-                'requests': 0, 
-                'reset_time': 0.0
             }
         }
         
-        # Credit tracking
-        self.credit_costs = {
-            'search': 1,
-            'scrape': 1
-        }
-        self.current_credits = 0
-        self.max_credits_per_query = int(os.getenv('FIRECRAWL_MAX_CREDITS_PER_QUERY', 20))
+        # Request tracking
+        self.request_count = 0
+        self.max_requests_per_query = int(os.getenv('FIRECRAWL_MAX_CREDITS_PER_QUERY', 20))
         
-        print(f"🔥 Firecrawl Research initialized")
+        print(f"🔥 Firecrawl Research initialized successfully")
+        print(f"   - URL: {self.firecrawl_api_url}")
+        print(f"   - Max requests per query: {self.max_requests_per_query}")
+        print(f"   - Rate limit: {self.rate_limits['search']['limit']} requests per {self.rate_limits['search']['window']/1000}s")
     
     async def check_rate_limit(self, endpoint: str) -> None:
         """Check and handle rate limiting"""
@@ -120,32 +126,32 @@ class FirecrawlResearch:
         
         state['requests'] += 1
     
-    def check_credit_limit(self, operation: str) -> bool:
-        """Check if we can afford the operation"""
-        cost = self.credit_costs[operation]
-        if self.current_credits + cost > self.max_credits_per_query:
-            print(f"🚫 Credit limit reached! Would use {self.current_credits + cost} credits")
+    def check_request_limit(self) -> bool:
+        """Check if we can make another request"""
+        if self.request_count >= self.max_requests_per_query:
+            print(f"🚫 Request limit reached! ({self.request_count}/{self.max_requests_per_query})")
             return False
         return True
     
-    def track_credit_usage(self, operation: str) -> None:
-        """Track credit usage"""
-        cost = self.credit_costs[operation]
-        self.current_credits += cost
-        if self.current_credits > self.max_credits_per_query * 0.8:
-            print(f"⚠️ Credits: {self.current_credits}/{self.max_credits_per_query}")
+    def track_request(self) -> None:
+        """Track request usage"""
+        self.request_count += 1
+        if self.request_count > self.max_requests_per_query * 0.8:
+            print(f"⚠️ Requests: {self.request_count}/{self.max_requests_per_query}")
     
-    def reset_credits(self) -> None:
-        """Reset credit tracking for new query"""
-        self.current_credits = 0
+    def reset_requests(self) -> None:
+        """Reset request tracking for new query"""
+        self.request_count = 0
     
     async def search_with_retry(self, query: str, max_retries: int = 3) -> Optional[Dict[str, Any]]:
-        """Search with retry logic and better credit management"""
+        """Search with retry logic and better request management"""
+        print(f"🔍 Searching for: '{query}'")
+        
         for attempt in range(max_retries):
             try:
-                # Check credit limit before making request
-                if not self.check_credit_limit("search"):
-                    print(f"  ⚠️ Credit limit reached ({self.current_credits}/{self.max_credits_per_query})")
+                # Check request limit before making request
+                if not self.check_request_limit():
+                    print(f"  ⚠️ Request limit reached ({self.request_count}/{self.max_requests_per_query})")
                     return None
                 
                 # Check rate limits
@@ -155,15 +161,12 @@ class FirecrawlResearch:
                 response = await self._make_search_request(query)
                 
                 if response and response.get("success"):
-                    self.track_credit_usage("search")
+                    self.track_request()
+                    print(f"  ✅ Search successful (attempt {attempt + 1})")
                     return response
                 elif response and response.get("error"):
                     error_msg = response.get("error", "").lower()
-                    if "insufficient credits" in error_msg or "payment required" in error_msg:
-                        print(f"  ❌ Payment required (402): Your Firecrawl account needs credits or upgrade")
-                        print(f"   Response: {response}")
-                        return None
-                    elif "rate limit" in error_msg:
+                    if "rate limit" in error_msg:
                         print(f"  ⏳ Rate limited, waiting... (attempt {attempt + 1}/{max_retries})")
                         await asyncio.sleep(2 ** attempt)  # Exponential backoff
                         continue
@@ -185,10 +188,14 @@ class FirecrawlResearch:
     
     async def evaluate_source_reliability(self, domain: str, context: str) -> Tuple[float, str]:
         """Evaluate source reliability using Gemini"""
+        print(f"🔍 DEBUG: evaluate_source_reliability called for domain: {domain}")
+        
         if not self.gemini_model:
+            print("🔍 DEBUG: No Gemini model available for reliability evaluation")
             return 0.5, "No AI model available"
         
         try:
+            print("🔍 DEBUG: About to create reliability evaluation prompt")
             prompt = f"""Evaluate the reliability of the following source domain for research about: "{context}"
 
 Domain: {domain}
@@ -216,7 +223,9 @@ Respond with JSON format:
   "reasoning": "Brief explanation of reliability assessment"
 }}"""
 
+            print("🔍 DEBUG: About to call Gemini model for reliability evaluation")
             response = await self.gemini_model.generate_content_async(prompt)
+            print("🔍 DEBUG: Gemini model response received for reliability evaluation")
             
             # Try to extract JSON from response
             try:
@@ -224,28 +233,40 @@ Respond with JSON format:
                 json_match = re.search(r'\{.*\}', response.text, re.DOTALL)
                 if json_match:
                     data = json.loads(json_match.group())
-                    return data.get('score', 0.5), data.get('reasoning', 'No reasoning provided')
-            except:
+                    score = data.get('score', 0.5)
+                    reasoning = data.get('reasoning', 'No reasoning provided')
+                    print(f"🔍 DEBUG: Extracted reliability score: {score}")
+                    return score, reasoning
+            except Exception as json_error:
+                print(f"🔍 DEBUG: JSON extraction failed: {json_error}")
                 pass
             
             # Fallback: try to extract score from text
             score_match = re.search(r'"score":\s*([0-9.]+)', response.text)
             if score_match:
                 score = float(score_match.group(1))
+                print(f"🔍 DEBUG: Extracted score from text: {score}")
                 return score, "Extracted from AI response"
             
+            print("🔍 DEBUG: Using default reliability score")
             return 0.5, "Default reliability score"
             
         except Exception as e:
-            print(f"❌ Error evaluating reliability: {e}")
+            print(f"❌ DEBUG: Error evaluating reliability: {e}")
+            print("🔍 DEBUG: evaluate_source_reliability traceback:")
+            traceback.print_exc()
             return 0.5, "Error in evaluation"
     
     async def generate_search_queries(self, query: str, learnings: Optional[List[str]] = None) -> List[Dict[str, Any]]:
         """Generate search queries using Gemini"""
+        print("🔍 DEBUG: generate_search_queries called")
+        
         if not self.gemini_model:
+            print("🔍 DEBUG: No Gemini model available, returning basic query")
             return [{"query": query, "research_goal": "Basic research"}]
         
         try:
+            print("🔍 DEBUG: About to create prompt for search queries")
             learnings_context = ""
             if learnings:
                 learnings_context = f"\nPrevious learnings:\n" + "\n".join([f"- {learning}" for learning in learnings[:5]])
@@ -269,18 +290,25 @@ Respond with JSON format:
   ]
 }}"""
 
+            print("🔍 DEBUG: About to call Gemini model for search queries")
             response = await self.gemini_model.generate_content_async(prompt)
+            print("🔍 DEBUG: Gemini model response received for search queries")
             
             # Extract JSON from response
             json_match = re.search(r'\{.*\}', response.text, re.DOTALL)
             if json_match:
                 data = json.loads(json_match.group())
-                return data.get('queries', [{"query": query, "research_goal": "Basic research"}])
+                queries = data.get('queries', [{"query": query, "research_goal": "Basic research"}])
+                print(f"🔍 DEBUG: Extracted {len(queries)} search queries from JSON")
+                return queries
             
+            print("🔍 DEBUG: No JSON found in response, returning basic query")
             return [{"query": query, "research_goal": "Basic research"}]
             
         except Exception as e:
-            print(f"❌ Error generating queries: {e}")
+            print(f"❌ DEBUG: Error generating queries: {e}")
+            print("🔍 DEBUG: generate_search_queries traceback:")
+            traceback.print_exc()
             return [{"query": query, "research_goal": "Basic research"}]
     
     async def process_search_results(self, query: str, result: Dict[str, Any], reliability_threshold: Optional[float] = None) -> Tuple[List[str], List[float], List[SourceMetadata]]:
@@ -289,6 +317,7 @@ Respond with JSON format:
             reliability_threshold = float(os.getenv('FIRECRAWL_RELIABILITY_THRESHOLD', 0.3))
         
         if not result or 'data' not in result:
+            print(f"[DEBUG] No 'data' in Firecrawl result: {result}")
             return [], [], []
         
         contents = []
@@ -329,15 +358,20 @@ Respond with JSON format:
         
         # Generate learnings from content using Gemini
         learnings, learning_reliabilities = await self.extract_learnings(contents, query)
+        print(f"[DEBUG] Extracted learnings: {learnings}")
         
         return learnings, learning_reliabilities, source_metadata
     
     async def extract_learnings(self, contents: List[str], query: str) -> Tuple[List[str], List[float]]:
         """Extract learnings from content using Gemini"""
+        print("🔍 DEBUG: extract_learnings called")
+        
         if not self.gemini_model or not contents:
+            print("🔍 DEBUG: No Gemini model or contents available for learning extraction")
             return [], []
         
         try:
+            print("🔍 DEBUG: About to combine content for learning extraction")
             # Combine content (limit to avoid token limits)
             combined_content = "\n\n---\n\n".join(contents[:5])  # Limit to 5 sources
             if len(combined_content) > 15000:
@@ -348,30 +382,42 @@ Respond with JSON format:
 Content:
 {combined_content}
 
-Respond with JSON format:
+IMPORTANT: Respond with ONLY valid JSON format, no additional text or explanations. Use this exact structure:
+
 {{
   "learnings": [
     {{
-      "content": "specific learning",
+      "content": "specific learning with facts, numbers, and entities",
       "confidence": 0.8,
       "sources": ["domain1.com", "domain2.com"]
     }}
   ]
-}}"""
+}}
 
+Ensure all property names are in double quotes and all string values are properly escaped."""
+
+            print("🔍 DEBUG: About to call Gemini model for learning extraction")
             response = await self.gemini_model.generate_content_async(prompt)
+            print("🔍 DEBUG: Gemini model response received for learning extraction")
             
             # Multiple strategies to extract JSON from response
+            print("🔍 DEBUG: About to extract learnings from response")
             learnings, reliabilities = self._extract_learnings_from_response(response.text)
             
             if learnings:
+                print(f"🔍 DEBUG: Extracted {len(learnings)} learnings from JSON response")
                 return learnings, reliabilities
             
             # Fallback: try to extract simple list format
-            return self._extract_simple_learnings(response.text)
+            print("🔍 DEBUG: Trying fallback simple learning extraction")
+            fallback_learnings, fallback_reliabilities = self._extract_simple_learnings(response.text)
+            print(f"🔍 DEBUG: Fallback extracted {len(fallback_learnings)} learnings")
+            return fallback_learnings, fallback_reliabilities
             
         except Exception as e:
-            print(f"❌ Error extracting learnings: {e}")
+            print(f"❌ DEBUG: Error extracting learnings: {e}")
+            print("🔍 DEBUG: extract_learnings traceback:")
+            traceback.print_exc()
             return [], []
     
     def _extract_learnings_from_response(self, response_text: str) -> Tuple[List[str], List[float]]:
@@ -379,34 +425,78 @@ Respond with JSON format:
         if not response_text:
             return [], []
         
-        # Strategy 1: Try to find JSON object
+        print(f"🔍 DEBUG: Raw response text length: {len(response_text)}")
+        print(f"🔍 DEBUG: Response preview: {response_text[:200]}...")
+        
+        # Strategy 1: Try to find JSON object with code block markers
         try:
-            json_match = re.search(r'\{.*\}', response_text, re.DOTALL)
-            if json_match:
-                json_str = json_match.group()
-                # Clean up common JSON issues
-                json_str = self._clean_json_string(json_str)
+            code_match = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', response_text, re.DOTALL)
+            if code_match:
+                json_str = code_match.group(1)
+                print(f"🔍 DEBUG: Found JSON in code block, length: {len(json_str)}")
                 data = json.loads(json_str)
                 learnings = [item['content'] for item in data.get('learnings', [])]
                 reliabilities = [item.get('confidence', 0.7) for item in data.get('learnings', [])]
+                print(f"🔍 DEBUG: Strategy 1 (code block) extracted {len(learnings)} learnings")
                 return learnings, reliabilities
         except Exception as e:
-            print(f"  ⚠️ Strategy 1 failed: {e}")
+            print(f"  ⚠️ Strategy 1 (code block) failed: {e}")
         
-        # Strategy 2: Try to find array of learnings
+        # Strategy 2: Try to find JSON object without code block markers
         try:
-            array_match = re.search(r'\[.*\]', response_text, re.DOTALL)
+            json_match = re.search(r'\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}', response_text, re.DOTALL)
+            if json_match:
+                json_str = json_match.group()
+                print(f"🔍 DEBUG: Found JSON object, length: {len(json_str)}")
+                # Try to clean and parse
+                cleaned_json = self._clean_json_string_robust(json_str)
+                data = json.loads(cleaned_json)
+                learnings = [item['content'] for item in data.get('learnings', [])]
+                reliabilities = [item.get('confidence', 0.7) for item in data.get('learnings', [])]
+                print(f"🔍 DEBUG: Strategy 2 (JSON object) extracted {len(learnings)} learnings")
+                return learnings, reliabilities
+        except Exception as e:
+            print(f"  ⚠️ Strategy 2 (JSON object) failed: {e}")
+        
+        # Strategy 3: Try to find array of learnings
+        try:
+            array_match = re.search(r'\[[^\[\]]*(?:\{[^{}]*\}[^\[\]]*)*\]', response_text, re.DOTALL)
             if array_match:
                 array_str = array_match.group()
-                # Clean up common JSON issues
-                array_str = self._clean_json_string(array_str)
-                learnings = json.loads(array_str)
+                print(f"🔍 DEBUG: Found array, length: {len(array_str)}")
+                # Try to clean and parse
+                cleaned_array = self._clean_json_string_robust(array_str)
+                learnings = json.loads(cleaned_array)
                 if isinstance(learnings, list) and all(isinstance(x, str) for x in learnings):
                     reliabilities = [0.7] * len(learnings)
+                    print(f"🔍 DEBUG: Strategy 3 (array) extracted {len(learnings)} learnings")
                     return learnings, reliabilities
         except Exception as e:
-            print(f"  ⚠️ Strategy 2 failed: {e}")
+            print(f"  ⚠️ Strategy 3 (array) failed: {e}")
         
+        # Strategy 4: Try to extract simple list format
+        try:
+            lines = response_text.split('\n')
+            learnings = []
+            for line in lines:
+                line = line.strip()
+                # Look for numbered or bulleted items
+                if re.match(r'^[\d\-•*]+\.?\s*', line):
+                    # Remove the marker
+                    content = re.sub(r'^[\d\-•*]+\.?\s*', '', line)
+                    # Remove quotes
+                    content = re.sub(r'^["\']|["\']$', '', content)
+                    if content and len(content) > 10:
+                        learnings.append(content)
+            
+            if learnings:
+                reliabilities = [0.6] * len(learnings)
+                print(f"🔍 DEBUG: Strategy 4 (simple list) extracted {len(learnings)} learnings")
+                return learnings[:15], reliabilities[:15]  # Limit to 15
+        except Exception as e:
+            print(f"  ⚠️ Strategy 4 (simple list) failed: {e}")
+        
+        print("🔍 DEBUG: All JSON extraction strategies failed")
         return [], []
     
     def _extract_simple_learnings(self, response_text: str) -> Tuple[List[str], List[float]]:
@@ -455,278 +545,150 @@ Respond with JSON format:
         
         return json_str
     
+    def _clean_json_string_robust(self, json_str: str) -> str:
+        """More robust JSON string cleaning that preserves structure"""
+        if not json_str:
+            return "{}"
+        
+        # Remove control characters but preserve newlines in strings
+        json_str = re.sub(r'[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]', '', json_str)
+        
+        # Fix missing quotes around property names (more carefully)
+        # Only fix if it's not already quoted
+        json_str = re.sub(r'(\s*)([a-zA-Z_][a-zA-Z0-9_]*)(\s*):', r'\1"\2"\3:', json_str)
+        
+        # Fix trailing commas before closing braces/brackets
+        json_str = re.sub(r',(\s*[}\]])', r'\1', json_str)
+        
+        # Handle escaped quotes properly
+        json_str = re.sub(r'\\"', r'__ESCAPED_QUOTE__', json_str)
+        json_str = re.sub(r'(?<!\\)"(?=.*":)', r'\\"', json_str)
+        json_str = re.sub(r'__ESCAPED_QUOTE__', r'\\"', json_str)
+        
+        # Fix common unicode issues
+        json_str = json_str.replace('\\u2019', "'")
+        json_str = json_str.replace('\\u201c', '"')
+        json_str = json_str.replace('\\u201d', '"')
+        json_str = json_str.replace('\\u2013', '-')
+        json_str = json_str.replace('\\u2014', '-')
+        
+        # Ensure the string starts and ends properly
+        if not json_str.strip().startswith('{') and not json_str.strip().startswith('['):
+            # Try to find the actual start
+            start_match = re.search(r'[{\[]', json_str)
+            if start_match:
+                json_str = json_str[start_match.start():]
+        
+        if not json_str.strip().endswith('}') and not json_str.strip().endswith(']'):
+            # Try to find the actual end
+            end_match = re.search(r'[}\]]', json_str[::-1])
+            if end_match:
+                json_str = json_str[:-end_match.start()-1]
+        
+        return json_str
+    
     async def generate_comprehensive_report(self, query: str, learnings: List[str], source_metadata: List[SourceMetadata], 
                                           learning_reliabilities: List[float]) -> Dict[str, Any]:
-        """Generate comprehensive report using Gemini"""
-        if not self.gemini_model:
-            return {"error": "No AI model available"}
-        
-        try:
-            # Prepare source reliability analysis
-            high_reliability = [s for s in source_metadata if s.reliability_score >= 0.8]
-            medium_reliability = [s for s in source_metadata if 0.6 <= s.reliability_score < 0.8]
-            low_reliability = [s for s in source_metadata if s.reliability_score < 0.6]
-            
-            reliability_analysis = f"""
-HIGH RELIABILITY SOURCES (≥80%): {len(high_reliability)} sources
-{chr(10).join([f"- {s.domain}: {s.reliability_score:.0%} - {s.reliability_reasoning}" for s in high_reliability])}
-
-MEDIUM RELIABILITY SOURCES (60-79%): {len(medium_reliability)} sources
-{chr(10).join([f"- {s.domain}: {s.reliability_score:.0%} - {s.reliability_reasoning}" for s in medium_reliability])}
-
-LOW RELIABILITY SOURCES (<60%): {len(low_reliability)} sources
-{chr(10).join([f"- {s.domain}: {s.reliability_score:.0%} - {s.reliability_reasoning}" for s in low_reliability])}
-"""
-            
-            # Prepare learnings with reliability scores
-            learnings_with_reliability = []
-            for i, learning in enumerate(learnings):
-                reliability = learning_reliabilities[i] if i < len(learning_reliabilities) else 0.7
-                learnings_with_reliability.append(f"[Reliability: {reliability:.2f}] {learning}")
-            
-            learnings_text = "\n".join(learnings_with_reliability)
-            
-            prompt = f"""You are an expert research analyst. Create a comprehensive research report for the query: "{query}"
-
-RESEARCH DATA:
-Total Sources: {len(source_metadata)}
-Total Learnings: {len(learnings)}
-
-LEARNINGS WITH RELIABILITY SCORES:
-{learnings_text}
-
-SOURCE RELIABILITY ANALYSIS:
-{reliability_analysis}
-
-REQUIREMENTS:
-Follow this EXACT report structure:
-
-1. EXECUTIVE SUMMARY (150-200 words):
-   - Key findings in 3-5 bullet points
-   - Primary recommendations
-   - Critical success factors
-
-2. ANALYSIS SECTIONS (3-5 sections):
-   - Natural section titles based on research content
-   - Data-driven insights with supporting evidence
-   - Strategic framework application (PESTLE, Porter's Five Forces, etc.)
-
-3. STRATEGIC RECOMMENDATIONS:
-   - Actionable roadmap with clear owners
-   - Implementation timelines
-   - Success metrics and KPIs
-
-4. FUTURE OUTLOOK:
-   - Market trends and implications
-   - Risk assessment
-   - Opportunity identification
-
-Generate the complete research report in JSON format:
-{{
-  "executive_summary": "150-200 word executive summary with key findings, primary recommendations, and critical success factors",
-  "sections": [
-    {{
-      "title": "Natural section title based on research content",
-      "content": "Data-driven insights with supporting evidence and strategic framework application (PESTLE, Porter's Five Forces, etc.)",
-      "chart_type": "bar|line|pie|scatter|area|radar|waterfall|funnel|gauge|none",
-      "chart_data": {{
-        "labels": ["A", "B", "C"],
-        "values": [10, 20, 30]
-      }}
-    }}
-  ],
-  "strategic_recommendations": {{
-    "title": "Strategic Recommendations",
-    "content": "Actionable roadmap with clear owners, implementation timelines, and success metrics/KPIs"
-  }},
-  "future_outlook": {{
-    "title": "Future Outlook",
-    "content": "Market trends and implications, risk assessment, and opportunity identification"
-  }},
-  "methodology": "Methodology section explaining data sources and quality",
-  "sources": [
-    {{
-      "url": "source_url",
-      "domain": "domain.com",
-      "reliability_score": 0.85,
-      "reliability_reasoning": "reasoning"
-    }}
-  ]
-}}"""
-
-            # Ensure gemini_model is available
-            if not self.gemini_model:
-                return {"error": "No AI model available"}
-            response = await self.gemini_model.generate_content_async(prompt)
-            
-            # Extract JSON from response with better error handling
-            report_data = self._extract_report_from_response(response.text)
-            
-            if report_data and "error" not in report_data:
-                return report_data
-            
-            return {"error": "Failed to parse report data"}
-            
-        except Exception as e:
-            print(f"❌ Error generating report: {e}")
-            return {"error": str(e)}
+        """
+        DEPRECATED: This method is no longer used.
+        Report generation is now handled by ReportPlanner in firecrawl_integration.py
+        This method is kept for backward compatibility but should not be used.
+        """
+        print("⚠️ WARNING: generate_comprehensive_report is deprecated. Use ReportPlanner instead.")
+        return {"error": "This method is deprecated. Use ReportPlanner for report generation."}
     
     def _extract_report_from_response(self, response_text: str) -> Optional[Dict[str, Any]]:
-        """Extract report data from AI response with robust JSON parsing"""
-        if not response_text:
-            return None
-        
-        # Strategy 1: Try to find JSON object
-        try:
-            json_match = re.search(r'\{.*\}', response_text, re.DOTALL)
-            if json_match:
-                json_str = json_match.group()
-                # Clean up common JSON issues
-                json_str = self._clean_json_string(json_str)
-                report_data = json.loads(json_str)
-                return report_data
-        except Exception as e:
-            print(f"  ⚠️ Report extraction Strategy 1 failed: {e}")
-        
-        # Strategy 2: Try to find JSON with code block markers
-        try:
-            code_match = re.search(r'```json\s*(.*?)\s*```', response_text, re.DOTALL)
-            if code_match:
-                json_str = code_match.group(1)
-                # Clean up common JSON issues
-                json_str = self._clean_json_string(json_str)
-                report_data = json.loads(json_str)
-                return report_data
-        except Exception as e:
-            print(f"  ⚠️ Report extraction Strategy 2 failed: {e}")
-        
+        """
+        DEPRECATED: This method is no longer used.
+        Report extraction is now handled by ReportPlanner in firecrawl_integration.py
+        This method is kept for backward compatibility but should not be used.
+        """
+        print("⚠️ WARNING: _extract_report_from_response is deprecated. Use ReportPlanner instead.")
         return None
     
     async def deep_research(self, query: str, breadth: Optional[int] = None, depth: Optional[int] = None, 
                            on_progress: Optional[Callable] = None) -> Dict[str, Any]:
-        """Perform deep research using Firecrawl and Gemini with adaptive breadth and true depth"""
+        """Perform deep research using Firecrawl URL and Gemini with adaptive breadth and true depth"""
         print(f"🚀 Starting deep research for: {query}")
         
-        # Use environment variables if not provided
-        if breadth is None:
-            breadth = int(os.getenv('FIRECRAWL_RESEARCH_BREADTH', 4))
-        if depth is None:
-            depth = int(os.getenv('FIRECRAWL_RESEARCH_DEPTH', 2))
+        # Add debug traceback printing
+        print("🔍 DEBUG: Starting deep_research with traceback monitoring...")
         
-        # Reset credits
-        self.reset_credits()
-        
-        # Generate initial search queries
-        initial_queries = await self.generate_search_queries(query)
-        
-        # Use adaptive breadth - start with breadth setting, can adjust based on findings
-        search_queries = initial_queries[:breadth]
-        
-        all_learnings = []
-        all_learning_reliabilities = []
-        all_source_metadata = []
-        all_visited_urls = []
-        all_query_results = []
-        
-        progress = ResearchProgress(
-            current_depth=0,
-            total_depth=depth,
-            current_breadth=0,
-            total_breadth=len(search_queries),
-            total_queries=len(search_queries)
-        )
-        
-        # Phase 1: Initial breadth search
-        print(f"📊 Phase 1: Initial breadth search ({len(search_queries)} queries)")
-        for i, search_query in enumerate(search_queries):
-            progress.current_breadth = i + 1
-            progress.current_query = search_query['query']
+        try:
+            # Use environment variables if not provided
+            if breadth is None:
+                breadth = int(os.getenv('FIRECRAWL_RESEARCH_BREADTH', 4))
+            if depth is None:
+                depth = int(os.getenv('FIRECRAWL_RESEARCH_DEPTH', 2))
             
-            if on_progress:
-                on_progress(progress)
+            # Reset requests
+            self.reset_requests()
             
-            print(f"🔍 Processing query {i+1}/{len(search_queries)}: {search_query['query']}")
+            # Generate initial search queries
+            print("🔍 DEBUG: About to call generate_search_queries...")
+            initial_queries = await self.generate_search_queries(query)
+            print(f"🔍 DEBUG: generate_search_queries completed, got {len(initial_queries)} queries")
             
-            # Perform search
-            result = await self.search_with_retry(search_query['query'])
+            # Use adaptive breadth - start with breadth setting, can adjust based on findings
+            search_queries = initial_queries[:breadth]
             
-            if result:
-                # Process results
-                learnings, reliabilities, metadata = await self.process_search_results(
-                    search_query['query'], 
-                    result, 
-                    search_query.get('reliability_threshold', 0.3)
-                )
-                
-                # Store query results for depth analysis
-                query_result = {
-                    'query': search_query['query'],
-                    'learnings': learnings,
-                    'reliabilities': reliabilities,
-                    'metadata': metadata,
-                    'quality_score': self._calculate_query_quality(learnings, metadata),
-                    'urls': [m.url for m in metadata]
-                }
-                all_query_results.append(query_result)
-                
-                # Add to collections
-                all_learnings.extend(learnings)
-                all_learning_reliabilities.extend(reliabilities)
-                all_source_metadata.extend(metadata)
-                urls = query_result['urls'] if isinstance(query_result['urls'], list) else [query_result['urls']]
-                all_visited_urls.extend(urls)
-                
-                progress.completed_queries += 1
-                progress.learnings_count = len(all_learnings)
-                
-                print(f"✅ Found {len(learnings)} learnings from {len(metadata)} sources (Quality: {query_result['quality_score']:.2f})")
-            else:
-                print(f"⚠️ Search failed for query {i+1}, continuing...")
+            all_learnings = []
+            all_learning_reliabilities = []
+            all_source_metadata = []
+            all_visited_urls = []
+            all_query_results = []
             
-            # Small delay between requests
-            await asyncio.sleep(1)
-        
-        # Phase 2: Adaptive depth search (if depth > 1)
-        if depth > 1 and all_learnings:
-            print(f"🔍 Phase 2: Adaptive depth search (depth {depth})")
-            depth_queries = await self._generate_depth_queries(all_learnings, query, depth - 1)
-            
-            # Prioritize depth queries based on potential value
-            prioritized_depth_queries = self._prioritize_queries(depth_queries, all_learnings)
-            
-            # Limit depth queries based on remaining credits and quality
-            max_depth_queries = min(
-                len(prioritized_depth_queries),
-                self.max_credits_per_query - self.current_credits,
-                6  # Maximum 6 depth queries
+            progress = ResearchProgress(
+                current_depth=0,
+                total_depth=depth,
+                current_breadth=0,
+                total_breadth=len(search_queries),
+                total_queries=len(search_queries)
             )
             
-            depth_queries_to_execute = prioritized_depth_queries[:max_depth_queries]
-            
-            print(f"🎯 Executing {len(depth_queries_to_execute)} prioritized depth queries")
-            
-            for i, depth_query in enumerate(depth_queries_to_execute):
-                progress.current_depth = 1
-                progress.current_query = depth_query['query']
+            # Phase 1: Initial breadth search
+            print(f"📊 Phase 1: Initial breadth search ({len(search_queries)} queries)")
+            for i, search_query in enumerate(search_queries):
+                progress.current_breadth = i + 1
+                progress.current_query = search_query['query']
                 
                 if on_progress:
-                    on_progress(progress)
+                    try:
+                        print("🔍 DEBUG: About to call on_progress callback...")
+                        on_progress(progress)
+                        print("🔍 DEBUG: on_progress callback completed successfully")
+                    except Exception as callback_error:
+                        print(f"❌ DEBUG: on_progress callback failed with error: {callback_error}")
+                        print("🔍 DEBUG: on_progress callback traceback:")
+                        traceback.print_exc()
                 
-                print(f"🔍 Depth query {i+1}/{len(depth_queries_to_execute)}: {depth_query['query']}")
+                print(f"🔍 Processing query {i+1}/{len(search_queries)}: {search_query['query']}")
                 
-                # Perform depth search
-                result = await self.search_with_retry(depth_query['query'])
+                # Perform search
+                print("🔍 DEBUG: About to call search_with_retry...")
+                result = await self.search_with_retry(search_query['query'])
+                print("🔍 DEBUG: search_with_retry completed")
                 
                 if result:
-                    # Process results with higher reliability threshold for depth searches
-                    reliability_threshold = depth_query.get('reliability_threshold', 0.5)
-                    min_threshold = 0.5
-                    final_threshold = reliability_threshold if reliability_threshold > min_threshold else min_threshold
+                    # Process results
+                    print("🔍 DEBUG: About to call process_search_results...")
                     learnings, reliabilities, metadata = await self.process_search_results(
-                        depth_query['query'], 
+                        search_query['query'], 
                         result, 
-                        final_threshold
+                        search_query.get('reliability_threshold', 0.3)
                     )
+                    print("🔍 DEBUG: process_search_results completed")
+                    
+                    # Store query results for depth analysis
+                    query_result = {
+                        'query': search_query['query'],
+                        'learnings': learnings,
+                        'reliabilities': reliabilities,
+                        'metadata': metadata,
+                        'quality_score': self._calculate_query_quality(learnings, metadata),
+                        'urls': [m.url for m in metadata]
+                    }
+                    all_query_results.append(query_result)
                     
                     # Add to collections
                     all_learnings.extend(learnings)
@@ -735,44 +697,117 @@ Generate the complete research report in JSON format:
                     urls = query_result['urls'] if isinstance(query_result['urls'], list) else [query_result['urls']]
                     all_visited_urls.extend(urls)
                     
+                    progress.completed_queries += 1
                     progress.learnings_count = len(all_learnings)
                     
-                    print(f"✅ Depth: Found {len(learnings)} learnings from {len(metadata)} sources")
+                    print(f"✅ Found {len(learnings)} learnings from {len(metadata)} sources (Quality: {query_result['quality_score']:.2f})")
                 else:
-                    print(f"⚠️ Depth search failed for query {i+1}")
+                    print(f"⚠️ Search failed for query {i+1}, continuing...")
                 
-                # Check credit limit
-                if self.current_credits >= self.max_credits_per_query * 0.9:
-                    print(f"⚠️ Credit limit reached during depth search")
-                    break
-                
+                # Small delay between requests
                 await asyncio.sleep(1)
-        
-        print(f"✅ Research completed: {len(all_learnings)} learnings from {len(all_visited_urls)} sources")
-        print(f"💳 Credits used: {self.current_credits}/{self.max_credits_per_query}")
-        
-        # Generate comprehensive report
-        report = await self.generate_comprehensive_report(
-            query, all_learnings, all_source_metadata, all_learning_reliabilities
-        )
-        
-        return {
-            "query": query,
-            "learnings": all_learnings,
-            "learning_reliabilities": all_learning_reliabilities,
-            "source_metadata": [vars(m) for m in all_source_metadata],
-            "visited_urls": all_visited_urls,
-            "query_results": all_query_results,
-            "report": report,
-            "credits_used": self.current_credits,
-            "research_metrics": {
-                "breadth_queries": len(search_queries),
-                "depth_queries": depth - 1 if depth > 1 else 0,
-                "total_sources": len(all_visited_urls),
-                "high_quality_sources": len([s for s in all_source_metadata if s.reliability_score >= 0.7]),
-                "average_reliability": sum(s.reliability_score for s in all_source_metadata) / len(all_source_metadata) if all_source_metadata else 0
+            
+            # Phase 2: Adaptive depth search (if depth > 1)
+            if depth > 1 and all_learnings:
+                print(f"🔍 Phase 2: Adaptive depth search (depth {depth})")
+                print("🔍 DEBUG: About to call _generate_depth_queries...")
+                depth_queries = await self._generate_depth_queries(all_learnings, query, depth - 1)
+                print("🔍 DEBUG: _generate_depth_queries completed")
+                
+                # Prioritize depth queries based on potential value
+                print("🔍 DEBUG: About to call _prioritize_queries...")
+                prioritized_depth_queries = self._prioritize_queries(depth_queries, all_learnings)
+                print("🔍 DEBUG: _prioritize_queries completed")
+                
+                # Limit depth queries based on remaining requests and quality
+                max_depth_queries = min(
+                    len(prioritized_depth_queries),
+                    self.max_requests_per_query - self.request_count,
+                    6  # Maximum 6 depth queries
+                )
+                
+                depth_queries_to_execute = prioritized_depth_queries[:max_depth_queries]
+                
+                print(f"🎯 Executing {len(depth_queries_to_execute)} prioritized depth queries")
+                
+                for i, depth_query in enumerate(depth_queries_to_execute):
+                    progress.current_depth = 1
+                    progress.current_query = depth_query['query']
+                    
+                    if on_progress:
+                        try:
+                            print("🔍 DEBUG: About to call on_progress callback for depth query...")
+                            on_progress(progress)
+                            print("🔍 DEBUG: on_progress callback for depth query completed successfully")
+                        except Exception as callback_error:
+                            print(f"❌ DEBUG: on_progress callback for depth query failed with error: {callback_error}")
+                            print("🔍 DEBUG: on_progress callback for depth query traceback:")
+                            traceback.print_exc()
+                    
+                    print(f"🔍 Depth query {i+1}/{len(depth_queries_to_execute)}: {depth_query['query']}")
+                    
+                    # Perform depth search
+                    result = await self.search_with_retry(depth_query['query'])
+                    
+                    if result:
+                        # Process results with higher reliability threshold for depth searches
+                        reliability_threshold = depth_query.get('reliability_threshold', 0.5)
+                        min_threshold = 0.5
+                        final_threshold = reliability_threshold if reliability_threshold > min_threshold else min_threshold
+                        learnings, reliabilities, metadata = await self.process_search_results(
+                            depth_query['query'], 
+                            result, 
+                            final_threshold
+                        )
+                        
+                        # Add to collections
+                        all_learnings.extend(learnings)
+                        all_learning_reliabilities.extend(reliabilities)
+                        all_source_metadata.extend(metadata)
+                        urls = query_result['urls'] if isinstance(query_result['urls'], list) else [query_result['urls']]
+                        all_visited_urls.extend(urls)
+                        
+                        progress.learnings_count = len(all_learnings)
+                        
+                        print(f"✅ Depth: Found {len(learnings)} learnings from {len(metadata)} sources")
+                    else:
+                        print(f"⚠️ Depth search failed for query {i+1}")
+                    
+                    # Check request limit
+                    if self.request_count >= self.max_requests_per_query * 0.9:
+                        print(f"⚠️ Request limit reached during depth search")
+                        break
+                    
+                    await asyncio.sleep(1)
+            
+            print(f"✅ Research completed: {len(all_learnings)} learnings from {len(all_visited_urls)} sources")
+            print(f"💳 Requests used: {self.request_count}/{self.max_requests_per_query}")
+            
+            # Report generation is now handled by ReportPlanner in firecrawl_integration.py
+            # This method only returns research data
+            
+            return {
+                "query": query,
+                "learnings": all_learnings,
+                "learning_reliabilities": all_learning_reliabilities,
+                "source_metadata": [vars(m) for m in all_source_metadata],
+                "visited_urls": all_visited_urls,
+                "query_results": all_query_results,
+                "requests_used": self.request_count,
+                "research_metrics": {
+                    "breadth_queries": len(search_queries),
+                    "depth_queries": depth - 1 if depth > 1 else 0,
+                    "total_sources": len(all_visited_urls),
+                    "high_quality_sources": len([s for s in all_source_metadata if s.reliability_score >= 0.7]),
+                    "average_reliability": sum(s.reliability_score for s in all_source_metadata) / len(all_source_metadata) if all_source_metadata else 0
+                }
             }
-        }
+            
+        except Exception as e:
+            print(f"❌ DEBUG: deep_research failed with error: {e}")
+            print("🔍 DEBUG: deep_research traceback:")
+            traceback.print_exc()
+            raise
     
     def _calculate_query_quality(self, learnings: List[str], metadata: List[SourceMetadata]) -> float:
         """Calculate quality score for a query based on learnings and source quality"""
@@ -901,11 +936,13 @@ Respond with JSON format:
         return priority_score
 
     async def _make_search_request(self, query: str) -> Optional[Dict[str, Any]]:
-        """Make the actual search request to Firecrawl API"""
+        """Make the actual search request to Firecrawl URL (direct access, no API key)"""
         try:
+            print(f"🌐 Making request to Firecrawl URL: {self.firecrawl_api_url}")
+            
             headers = {
-                "Authorization": f"Bearer {self.firecrawl_api_key}",
-                "Content-Type": "application/json"
+                "Content-Type": "application/json",
+                "User-Agent": "Mozilla/5.0 (compatible; ResearchBot/1.0)"
             }
             
             payload = {
@@ -916,27 +953,38 @@ Respond with JSON format:
                 }
             }
             
+            print(f"📤 Request payload: {json.dumps(payload, indent=2)}")
+            
             response = requests.post(
-                "https://api.firecrawl.dev/v1/search",
+                self.firecrawl_api_url,
                 headers=headers,
                 json=payload,
                 timeout=int(os.getenv('FIRECRAWL_REQUEST_TIMEOUT', 30))
             )
             
+            print(f"📥 Response status: {response.status_code}")
+            print(f"📥 Response headers: {dict(response.headers)}")
+            
             if response.status_code == 200:
-                return response.json()
+                response_data = response.json()
+                print(f"✅ Request successful - Found {len(response_data.get('data', []))} results")
+                return response_data
             elif response.status_code == 429:
+                print("⏳ Rate limited by server")
                 return {"error": "rate limit"}
-            elif response.status_code == 402:
-                return {"error": "insufficient credits"}
             elif response.status_code == 401:
+                print("🔐 Unauthorized - check URL configuration")
                 return {"error": "unauthorized"}
             elif response.status_code == 403:
+                print("🚫 Forbidden - access denied")
                 return {"error": "forbidden"}
             else:
+                print(f"❌ HTTP {response.status_code}: {response.text}")
                 return {"error": f"HTTP {response.status_code}: {response.text}"}
                 
         except Exception as e:
+            print(f"❌ Exception in _make_search_request: {e}")
+            print(f"   Traceback: {traceback.format_exc()}")
             return {"error": str(e)}
 
 
