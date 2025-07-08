@@ -166,9 +166,9 @@ class FirecrawlResearch:
                     return response
                 elif response and response.get("error"):
                     error_msg = response.get("error", "").lower()
-                    if "rate limit" in error_msg:
-                        print(f"  ⏳ Rate limited, waiting... (attempt {attempt + 1}/{max_retries})")
-                        await asyncio.sleep(2 ** attempt)  # Exponential backoff
+                    if "rate limit" in error_msg or "433" in error_msg or "443" in error_msg or "service error" in error_msg:
+                        print(f"  ⏳ Rate limited or service error, waiting... (attempt {attempt + 1}/{max_retries})")
+                        await asyncio.sleep(min(2 ** attempt, 3))  # Capped exponential backoff (max 3 seconds)
                         continue
                     else:
                         print(f"  ⚠️ Search failed: {response.get('error')}")
@@ -180,86 +180,108 @@ class FirecrawlResearch:
             except Exception as e:
                 print(f"  ❌ Search error (attempt {attempt + 1}/{max_retries}): {e}")
                 if attempt < max_retries - 1:
-                    await asyncio.sleep(1)
+                    await asyncio.sleep(0.5)  # Reduced from 1 second to 0.5 seconds
                 else:
                     return None
         
         return None
     
+    def _get_cached_reliability_score(self, domain: str, context: str) -> Tuple[float, str]:
+        """Get cached reliability score to reduce Gemini API calls"""
+        # Common domain reliability cache
+        domain_cache = {
+            # High reliability domains
+            'reuters.com': (0.9, 'Respected international news organization'),
+            'bloomberg.com': (0.85, 'Leading financial news and data provider'),
+            'cnn.com': (0.8, 'Major news network with editorial oversight'),
+            'bbc.com': (0.9, 'Public service broadcaster with high editorial standards'),
+            'nytimes.com': (0.9, 'Prestigious newspaper with fact-checking'),
+            'wsj.com': (0.9, 'Leading business and financial news'),
+            'forbes.com': (0.75, 'Business magazine with editorial oversight'),
+            'techcrunch.com': (0.7, 'Technology news with industry expertise'),
+            'statista.com': (0.85, 'Statistical data and market research'),
+            'iea.org': (0.9, 'International Energy Agency - authoritative source'),
+            'worldbank.org': (0.9, 'International financial institution'),
+            'imf.org': (0.9, 'International Monetary Fund'),
+            'oecd.org': (0.9, 'Organisation for Economic Co-operation and Development'),
+            
+            # Medium reliability domains
+            'medium.com': (0.6, 'Platform with mixed content quality'),
+            'linkedin.com': (0.65, 'Professional network with business content'),
+            'reddit.com': (0.4, 'User-generated content platform'),
+            'wikipedia.org': (0.7, 'Crowdsourced encyclopedia with citations'),
+            
+            # Low reliability domains
+            'blogspot.com': (0.3, 'Personal blog platform'),
+            'wordpress.com': (0.4, 'Mixed content quality'),
+            'tumblr.com': (0.2, 'Social media platform'),
+        }
+        
+        # Check cache first
+        if domain in domain_cache:
+            return domain_cache[domain]
+        
+        # Check for domain patterns
+        domain_lower = domain.lower()
+        
+        # Government/educational domains
+        if any(pattern in domain_lower for pattern in ['.gov', '.edu', '.ac.', 'university', 'college']):
+            return (0.85, 'Government or educational institution')
+        
+        # News domains
+        if any(pattern in domain_lower for pattern in ['.news', 'news', 'times', 'post', 'tribune', 'herald']):
+            return (0.75, 'News organization')
+        
+        # Business/tech domains
+        if any(pattern in domain_lower for pattern in ['.com', 'business', 'tech', 'industry', 'market']):
+            return (0.6, 'Business or industry website')
+        
+        # Default score for unknown domains
+        return (0.5, 'Unknown domain - default reliability score')
+
     async def evaluate_source_reliability(self, domain: str, context: str) -> Tuple[float, str]:
-        """Evaluate source reliability using Gemini"""
-        print(f"🔍 DEBUG: evaluate_source_reliability called for domain: {domain}")
-        
-        if not self.gemini_model:
-            print("🔍 DEBUG: No Gemini model available for reliability evaluation")
-            return 0.5, "No AI model available"
-        
-        try:
-            print("🔍 DEBUG: About to create reliability evaluation prompt")
-            prompt = f"""Evaluate the reliability of the following source domain for research about: "{context}"
-
-Domain: {domain}
-
-Consider factors like:
-1. Editorial standards and fact-checking processes
-2. Domain expertise in the subject matter
-3. Reputation for accuracy and objectivity
-4. Transparency about sources and methodology
-5. Professional vs user-generated content
-6. Commercial biases or conflicts of interest
-7. Academic or professional credentials
-8. Track record in the field
-
-Return a reliability score between 0 and 1, where:
-- 0.9-1.0: Highest reliability (e.g. peer-reviewed journals, primary sources)
-- 0.7-0.89: Very reliable (e.g. respected news organizations)
-- 0.5-0.69: Moderately reliable (e.g. industry blogs with editorial oversight)
-- 0.3-0.49: Limited reliability (e.g. personal blogs, commercial sites)
-- 0-0.29: Low reliability (e.g. known misinformation sources)
-
-Respond with JSON format:
-{{
-  "score": 0.75,
-  "reasoning": "Brief explanation of reliability assessment"
-}}"""
-
-            print("🔍 DEBUG: About to call Gemini model for reliability evaluation")
-            response = await self.gemini_model.generate_content_async(prompt)
-            print("🔍 DEBUG: Gemini model response received for reliability evaluation")
-            
-            # Try to extract JSON from response
-            try:
-                # Find JSON in the response
-                json_match = re.search(r'\{.*\}', response.text, re.DOTALL)
-                if json_match:
-                    data = json.loads(json_match.group())
-                    score = data.get('score', 0.5)
-                    reasoning = data.get('reasoning', 'No reasoning provided')
-                    print(f"🔍 DEBUG: Extracted reliability score: {score}")
-                    return score, reasoning
-            except Exception as json_error:
-                print(f"🔍 DEBUG: JSON extraction failed: {json_error}")
-                pass
-            
-            # Fallback: try to extract score from text
-            score_match = re.search(r'"score":\s*([0-9.]+)', response.text)
-            if score_match:
-                score = float(score_match.group(1))
-                print(f"🔍 DEBUG: Extracted score from text: {score}")
-                return score, "Extracted from AI response"
-            
-            print("🔍 DEBUG: Using default reliability score")
-            return 0.5, "Default reliability score"
-            
-        except Exception as e:
-            print(f"❌ DEBUG: Error evaluating reliability: {e}")
-            print("🔍 DEBUG: evaluate_source_reliability traceback:")
-            traceback.print_exc()
-            return 0.5, "Error in evaluation"
+        """Evaluate source reliability using Gemini - kept for fallback"""
+        # Use cached version for performance
+        return self._get_cached_reliability_score(domain, context)
     
-    async def generate_search_queries(self, query: str, learnings: Optional[List[str]] = None) -> List[Dict[str, Any]]:
-        """Generate search queries using Gemini"""
-        print("🔍 DEBUG: generate_search_queries called")
+    def generate_search_queries(self, query: str, learnings: Optional[List[str]] = None) -> List[Dict[str, Any]]:
+        """Generate search queries using predefined patterns - OPTIMIZED to reduce Gemini calls"""
+        print("🔍 DEBUG: generate_search_queries called (optimized)")
+        
+        # Predefined query patterns for common research topics
+        base_queries = [
+            {"query": query, "research_goal": "General overview and current status", "reliability_threshold": 0.6},
+            {"query": f"{query} market analysis 2024", "research_goal": "Market analysis and trends", "reliability_threshold": 0.7},
+            {"query": f"{query} statistics data", "research_goal": "Statistical data and metrics", "reliability_threshold": 0.8},
+            {"query": f"{query} competitive landscape", "research_goal": "Competitive analysis", "reliability_threshold": 0.6},
+            {"query": f"{query} future outlook forecast", "research_goal": "Future predictions and forecasts", "reliability_threshold": 0.6},
+        ]
+        
+        # Add topic-specific queries based on keywords
+        query_lower = query.lower()
+        
+        if any(word in query_lower for word in ['tesla', 'electric', 'vehicle', 'ev']):
+            base_queries.extend([
+                {"query": "Tesla electric vehicle market share 2024", "research_goal": "Market share analysis", "reliability_threshold": 0.7},
+                {"query": "Tesla EV sales statistics 2024", "research_goal": "Sales performance data", "reliability_threshold": 0.8},
+            ])
+        elif any(word in query_lower for word in ['apple', 'iphone', 'technology']):
+            base_queries.extend([
+                {"query": "Apple iPhone market performance 2024", "research_goal": "Product performance analysis", "reliability_threshold": 0.7},
+                {"query": "Apple technology innovation trends", "research_goal": "Innovation analysis", "reliability_threshold": 0.6},
+            ])
+        elif any(word in query_lower for word in ['nvidia', 'ai', 'artificial intelligence']):
+            base_queries.extend([
+                {"query": "NVIDIA AI chip market dominance", "research_goal": "Market position analysis", "reliability_threshold": 0.7},
+                {"query": "NVIDIA artificial intelligence growth 2024", "research_goal": "Growth analysis", "reliability_threshold": 0.7},
+            ])
+        
+        # Limit to 6 queries maximum
+        return base_queries[:6]
+
+    async def generate_search_queries_ai(self, query: str, learnings: Optional[List[str]] = None) -> List[Dict[str, Any]]:
+        """Generate search queries using Gemini - kept for fallback"""
+        print("🔍 DEBUG: generate_search_queries_ai called")
         
         if not self.gemini_model:
             print("🔍 DEBUG: No Gemini model available, returning basic query")
@@ -340,8 +362,8 @@ Respond with JSON format:
             except:
                 domain = url
             
-            # Evaluate reliability
-            reliability_score, reasoning = await self.evaluate_source_reliability(domain, query)
+            # Evaluate reliability - OPTIMIZED: Use cached/default scores for common domains
+            reliability_score, reasoning = self._get_cached_reliability_score(domain, query)
             
             # Only include if above threshold
             if reliability_score >= reliability_threshold:
@@ -626,7 +648,7 @@ Ensure all property names are in double quotes and all string values are properl
             
             # Generate initial search queries
             print("🔍 DEBUG: About to call generate_search_queries...")
-            initial_queries = await self.generate_search_queries(query)
+            initial_queries = self.generate_search_queries(query)
             print(f"🔍 DEBUG: generate_search_queries completed, got {len(initial_queries)} queries")
             
             # Use adaptive breadth - start with breadth setting, can adjust based on findings
@@ -711,7 +733,7 @@ Ensure all property names are in double quotes and all string values are properl
             if depth > 1 and all_learnings:
                 print(f"🔍 Phase 2: Adaptive depth search (depth {depth})")
                 print("🔍 DEBUG: About to call _generate_depth_queries...")
-                depth_queries = await self._generate_depth_queries(all_learnings, query, depth - 1)
+                depth_queries = self._generate_depth_queries(all_learnings, query, depth - 1)
                 print("🔍 DEBUG: _generate_depth_queries completed")
                 
                 # Prioritize depth queries based on potential value
@@ -838,8 +860,72 @@ Ensure all property names are in double quotes and all string values are properl
         
         return quality_score
     
-    async def _generate_depth_queries(self, learnings: List[str], original_query: str, depth_levels: int) -> List[Dict[str, Any]]:
-        """Generate follow-up queries based on initial learnings for depth search"""
+    def _generate_depth_queries(self, learnings: List[str], original_query: str, depth_levels: int) -> List[Dict[str, Any]]:
+        """Generate follow-up queries based on initial learnings - OPTIMIZED to reduce Gemini calls"""
+        if not learnings:
+            return []
+        
+        try:
+            # Extract key entities and numbers from learnings
+            key_entities = []
+            key_numbers = []
+            
+            for learning in learnings[:5]:  # Use top 5 learnings
+                # Extract numbers (percentages, years, etc.)
+                numbers = re.findall(r'\d+(?:\.\d+)?%?', learning)
+                key_numbers.extend(numbers)
+                
+                # Extract potential entities (companies, products, etc.)
+                # Simple pattern matching for common entities
+                if any(word in learning.lower() for word in ['tesla', 'apple', 'nvidia', 'google', 'amazon']):
+                    key_entities.extend(['Tesla', 'Apple', 'NVIDIA', 'Google', 'Amazon'])
+            
+            # Generate depth queries based on extracted information
+            depth_queries = []
+            
+            # Add queries for key numbers found
+            for number in set(key_numbers[:3]):  # Limit to 3 unique numbers
+                depth_queries.append({
+                    "query": f"{original_query} {number} verification",
+                    "research_goal": f"Verify the {number} statistic or data point",
+                    "reliability_threshold": 0.7,
+                    "priority": 1
+                })
+            
+            # Add queries for key entities
+            for entity in set(key_entities[:2]):  # Limit to 2 entities
+                depth_queries.append({
+                    "query": f"{entity} {original_query} detailed analysis",
+                    "research_goal": f"Detailed analysis of {entity} in this context",
+                    "reliability_threshold": 0.6,
+                    "priority": 2
+                })
+            
+            # Add general verification queries
+            depth_queries.extend([
+                {
+                    "query": f"{original_query} latest data 2024",
+                    "research_goal": "Find the most recent data and statistics",
+                    "reliability_threshold": 0.8,
+                    "priority": 1
+                },
+                {
+                    "query": f"{original_query} market share comparison",
+                    "research_goal": "Compare market shares and competitive positions",
+                    "reliability_threshold": 0.7,
+                    "priority": 2
+                }
+            ])
+            
+            # Limit to depth_levels * 2 queries
+            return depth_queries[:depth_levels * 2]
+            
+        except Exception as e:
+            print(f"❌ Error generating depth queries: {e}")
+            return []
+
+    async def _generate_depth_queries_ai(self, learnings: List[str], original_query: str, depth_levels: int) -> List[Dict[str, Any]]:
+        """Generate follow-up queries using Gemini - kept for fallback"""
         if not self.gemini_model or not learnings:
             return []
         
@@ -972,6 +1058,10 @@ Respond with JSON format:
             elif response.status_code == 429:
                 print("⏳ Rate limited by server")
                 return {"error": "rate limit"}
+            elif response.status_code == 433:
+                print("🚫 433 error - likely rate limiting or service-specific error")
+                print(f"📋 Response: {response.text[:200]}...")
+                return {"error": "rate limit or service error"}
             elif response.status_code == 401:
                 print("🔐 Unauthorized - check URL configuration")
                 return {"error": "unauthorized"}

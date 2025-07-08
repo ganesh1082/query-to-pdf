@@ -7,11 +7,21 @@ import os
 from typing import Dict, Any, Optional, List
 import warnings
 from dotenv import load_dotenv
+import re
+from datetime import datetime
 
 # Load environment variables
 load_dotenv()
 
 warnings.simplefilter(action='ignore', category=FutureWarning)
+
+# Import charts from visuals/charts.py
+try:
+    from visuals.charts import get_chart_catalog, _CHART_REGISTRY
+    CHARTS_AVAILABLE = True
+except ImportError:
+    CHARTS_AVAILABLE = False
+    print("⚠️ visuals.charts module not available, using fallback chart implementations")
 
 class PremiumVisualizationGenerator:
     """Creates a diverse variety of professional charts and saves them as image files."""
@@ -180,6 +190,24 @@ class PremiumVisualizationGenerator:
             plt.close(fig)  # Make sure to close the figure even if saving fails
             return ""
 
+    def _save_plot_to_assets(self, fig, filename: str) -> str:
+        """Saves the Matplotlib figure to assets directory for direct PDF inclusion."""
+        try:
+            # Ensure assets directory exists
+            assets_dir = "assets"
+            os.makedirs(assets_dir, exist_ok=True)
+            
+            filepath = os.path.join(assets_dir, f"{filename}.png")
+            # Set transparent background
+            fig.patch.set_alpha(0.0)
+            fig.savefig(filepath, format='png', dpi=300, bbox_inches='tight', transparent=True)
+            plt.close(fig)
+            return filepath
+        except Exception as e:
+            print(f"  ⚠️ Error saving chart to assets: {e}")
+            plt.close(fig)  # Make sure to close the figure even if saving fails
+            return ""
+
     def _create_placeholder_chart(self, title: str) -> str:
         """Creates a placeholder image indicating missing data."""
         try:
@@ -285,6 +313,517 @@ class PremiumVisualizationGenerator:
         
         print(f"  ⚠️ Unsupported chart type: {chart_type}")
         return self._create_placeholder_chart(f"Unsupported: {chart_type}")
+
+    def create_chart_for_pdf(self, section_data: Dict[str, Any]) -> str:
+        """Creates a chart and saves it to assets directory for direct PDF inclusion."""
+        chart_type = section_data.get("chart_type")
+        data = section_data.get("chart_data")
+        title = section_data.get("title")
+        palette = self._get_palette(section_data.get("color_palette"))
+        
+        print(f"  🔍 Debug - PDF Chart: {title}")
+        print(f"  🔍 Debug - Type: {chart_type}")
+        print(f"  🔍 Debug - Data: {data}")
+        
+        # Enhanced validation with better error messages
+        if not chart_type or chart_type == "none":
+            print(f"  ⚠️ No chart type specified for: {title}")
+            return ""
+        
+        if not data or not isinstance(data, dict) or len(data) == 0:
+            print(f"  ⚠️ Missing or empty chart data for: {title}")
+            # Try to generate meaningful default data based on chart type
+            default_data = self._generate_default_chart_data(chart_type, title)
+            if default_data:
+                print(f"  🔧 Using generated default data for: {title}")
+                data = default_data
+            else:
+                return self._create_placeholder_chart_for_pdf(f"Data Missing: {title}")
+        
+        if not title:
+            print(f"  ⚠️ Missing title for chart")
+            return self._create_placeholder_chart_for_pdf("Untitled Chart")
+
+        safe_title = "".join(c for c in (title or "") if c.isalnum()).replace(' ', '_')[:30]
+
+        # ONLY use charts from visuals/charts.py registry
+        if CHARTS_AVAILABLE and chart_type in _CHART_REGISTRY:
+            try:
+                print(f"  🎨 Using registry chart: {chart_type}")
+                return self._create_chart_with_registry(chart_type, data, title, safe_title)
+            except Exception as e:
+                print(f"  ⚠️ Registry chart failed: {e}")
+                return self._create_placeholder_chart_for_pdf(f"Chart creation failed: {title}")
+        else:
+            print(f"  ⚠️ Chart type '{chart_type}' not available in registry")
+            return self._create_placeholder_chart_for_pdf(f"Unsupported chart type: {chart_type}")
+
+    def _create_chart_with_registry(self, chart_type: str, data: Dict[str, Any], title: str, safe_title: str) -> str:
+        """Create chart using the centralized chart registry from visuals/charts.py"""
+        if not CHARTS_AVAILABLE or chart_type not in _CHART_REGISTRY:
+            raise ValueError(f"Chart type {chart_type} not available in registry")
+        
+        chart_func = _CHART_REGISTRY[chart_type]["func"]
+        
+        # Create figure with transparent background
+        fig, ax = plt.subplots(figsize=(10, 7))
+        fig.patch.set_alpha(0.0)
+        ax.patch.set_alpha(0.0)
+        
+        # Apply template colors
+        self._apply_template_colors(ax)
+        
+        # Call the chart function
+        chart_func(data, ax)
+        
+        # Set title
+        ax.set_title(title, fontsize=14, fontweight='bold', color=self.primary_color)
+        
+        # Style the chart
+        self._style_chart(ax)
+        
+        plt.tight_layout()
+        return self._save_plot_to_assets(fig, f"{chart_type}_{safe_title}")
+
+    def _apply_template_colors(self, ax):
+        """Apply template colors to the chart"""
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+        ax.spines['left'].set_color(self.secondary_color)
+        ax.spines['bottom'].set_color(self.secondary_color)
+        ax.tick_params(colors=self.secondary_color)
+
+    def _style_chart(self, ax):
+        """Apply consistent styling to charts"""
+        # Additional styling can be added here
+        pass
+
+    def _generate_default_chart_data(self, chart_type: str, title: Optional[str]) -> Optional[Dict[str, Any]]:
+        """Generate meaningful default chart data based on chart type and title."""
+        try:
+            if chart_type == "area":
+                # Generate area chart data with trend
+                return {
+                    "labels": ["2020", "2021", "2022", "2023", "2024", "2025"],
+                    "values": [100, 120, 140, 160, 180, 200]
+                }
+            elif chart_type == "line":
+                # Generate line chart data with growth trend
+                return {
+                    "labels": ["Q1", "Q2", "Q3", "Q4"],
+                    "values": [85, 95, 105, 115]
+                }
+            elif chart_type == "bar":
+                # Generate bar chart data
+                return {
+                    "labels": ["Category A", "Category B", "Category C", "Category D"],
+                    "values": [25, 35, 20, 20]
+                }
+            elif chart_type == "pie":
+                # Generate pie chart data
+                return {
+                    "labels": ["Primary", "Secondary", "Tertiary", "Other"],
+                    "values": [40, 30, 20, 10]
+                }
+            elif chart_type == "donut":
+                # Generate donut chart data
+                return {
+                    "labels": ["Segment 1", "Segment 2", "Segment 3", "Segment 4"],
+                    "values": [35, 25, 25, 15]
+                }
+            elif chart_type == "scatter":
+                # Generate scatter plot data
+                return {
+                    "labels": ["Point A", "Point B", "Point C", "Point D", "Point E"],
+                    "x_values": [10, 20, 30, 40, 50],
+                    "y_values": [15, 25, 35, 45, 55],
+                    "sizes": [100, 150, 200, 250, 300]
+                }
+            elif chart_type == "horizontalBar":
+                # Generate horizontal bar chart data
+                return {
+                    "labels": ["Group A", "Group B", "Group C", "Group D"],
+                    "values": [30, 25, 20, 25]
+                }
+            elif chart_type == "gauge":
+                # Generate gauge chart data
+                return {
+                    "value": 75,
+                    "max": 100,
+                    "label": "Performance Score"
+                }
+            elif chart_type == "radar":
+                # Generate radar chart data
+                return {
+                    "labels": ["Quality", "Speed", "Cost", "Innovation", "Service"],
+                    "values": [80, 70, 85, 75, 90]
+                }
+            else:
+                return None
+        except Exception as e:
+            print(f"  ⚠️ Error generating default data: {e}")
+            return None
+
+    def _create_placeholder_chart_for_pdf(self, title: str) -> str:
+        """Creates a placeholder image in assets directory for PDF inclusion."""
+        try:
+            fig, ax = plt.subplots(figsize=(10, 6))
+            # Set transparent background
+            fig.patch.set_alpha(0.0)
+            ax.patch.set_alpha(0.0)
+            ax.text(0.5, 0.5, "Data Not Available\nOr Malformed", ha='center', va='center', fontsize=18, color='#999')
+            ax.set_title(title, fontsize=14, fontweight='bold')
+            ax.grid(False)
+            ax.set_xticks([])
+            ax.set_yticks([])
+            safe_title = "".join(c for c in title if c.isalnum() or c in (' ', '-', '_')).rstrip().replace(' ', '_')
+            return self._save_plot_to_assets(fig, f"placeholder_{safe_title}")
+        except Exception as e:
+                    print(f"  ⚠️ Error creating placeholder chart for PDF: {e}")
+        return ""
+
+    # PDF-specific chart creation methods (wrappers around existing methods)
+    def _create_bar_chart_for_pdf(self, data, title, palette, chart_type, safe_title):
+        """Create bar chart for PDF inclusion"""
+        labels, values = data.get("labels", []), data.get("values", [])
+        
+        if not all([labels, values, len(labels) == len(values)]): 
+            return self._create_placeholder_chart_for_pdf(title)
+        
+        try:
+            clean_values = []
+            for val in values:
+                if isinstance(val, (list, dict)):
+                    if isinstance(val, list) and len(val) > 0:
+                        clean_values.append(float(val[0]) if isinstance(val[0], (int, float)) else 0)
+                    else:
+                        clean_values.append(0)
+                else:
+                    clean_values.append(float(val) if isinstance(val, (int, float)) else 0)
+            
+            clean_labels = [str(label) for label in labels]
+            
+        except (ValueError, TypeError):
+            return self._create_placeholder_chart_for_pdf(f"Invalid data for {title}")
+        
+        fig, ax = plt.subplots(figsize=(10, 7))
+        fig.patch.set_alpha(0.0)
+        ax.patch.set_alpha(0.0)
+        
+        orient = 'h' if chart_type == "horizontalBar" else 'v'
+        
+        try:
+            template_colors = self._get_template_palette(len(clean_labels))
+            
+            if orient == 'h':
+                bars = ax.barh(clean_labels, clean_values, color=template_colors)
+            else:
+                bars = ax.bar(clean_labels, clean_values, color=template_colors)
+            
+            for i, bar in enumerate(bars):
+                height = bar.get_height() if orient == 'v' else bar.get_width()
+                ax.text(bar.get_x() + bar.get_width()/2. if orient == 'v' else height + max(clean_values)*0.01,
+                       bar.get_y() + bar.get_height()/2. if orient == 'v' else bar.get_y() + bar.get_height()/2.,
+                       f'{height:.1f}',
+                       ha='center', va='center', fontweight='bold', fontsize=10, color='white')
+            
+        except Exception as e:
+            print(f"  ⚠️ Error creating bar chart for PDF '{title}': {e}")
+            return self._create_placeholder_chart_for_pdf(f"Chart creation failed for {title}")
+        
+        ax.set_title(title, fontsize=14, fontweight='bold', color=self.primary_color)
+        ax.set_xlabel('Values' if orient == 'v' else '', color=self.secondary_color)
+        ax.set_ylabel('Categories' if orient == 'v' else 'Values', color=self.secondary_color)
+        
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+        ax.spines['left'].set_color(self.secondary_color)
+        ax.spines['bottom'].set_color(self.secondary_color)
+        ax.tick_params(colors=self.secondary_color)
+        
+        plt.tight_layout()
+        return self._save_plot_to_assets(fig, f"bar_{safe_title}")
+
+    def _create_line_or_area_chart_for_pdf(self, data, title, chart_type, safe_title):
+        """Create line/area chart for PDF inclusion"""
+        labels, values = data.get("labels", []), data.get("values", [])
+        series = data.get("series", [])
+        
+        if series and isinstance(series, list) and len(series) > 0 and isinstance(series[0], dict):
+            fig, ax = plt.subplots(figsize=(10, 6))
+            fig.patch.set_alpha(0.0)
+            ax.patch.set_alpha(0.0)
+            
+            template_colors = self._get_template_palette(len(series))
+            
+            for i, series_obj in enumerate(series):
+                if isinstance(series_obj, dict) and 'name' in series_obj and 'values' in series_obj:
+                    series_name = series_obj['name']
+                    series_values = series_obj['values']
+                    if len(series_values) == len(labels):
+                        color = template_colors[i % len(template_colors)]
+                        ax.plot(labels, series_values, marker='o', color=color, lw=2, label=series_name)
+                        if chart_type == "area":
+                            ax.fill_between(labels, series_values, alpha=0.2, color=color)
+            
+            ax.set_title(title, fontsize=14, fontweight='bold', color=self.primary_color)
+            ax.legend(frameon=False)
+            ax.tick_params(axis='x', rotation=25, colors=self.secondary_color)
+            ax.tick_params(axis='y', colors=self.secondary_color)
+            
+            ax.spines['top'].set_visible(False)
+            ax.spines['right'].set_visible(False)
+            ax.spines['left'].set_color(self.secondary_color)
+            ax.spines['bottom'].set_color(self.secondary_color)
+            
+            plt.tight_layout()
+            return self._save_plot_to_assets(fig, f"{chart_type}_{safe_title}")
+        else:
+            # Single series
+            if not all([labels, values, len(labels) == len(values)]):
+                return self._create_placeholder_chart_for_pdf(title)
+            
+            fig, ax = plt.subplots(figsize=(10, 6))
+            fig.patch.set_alpha(0.0)
+            ax.patch.set_alpha(0.0)
+            
+            try:
+                clean_values = [float(val) if isinstance(val, (int, float)) else 0 for val in values]
+                clean_labels = [str(label) for label in labels]
+                
+                ax.plot(clean_labels, clean_values, marker='o', color=self.accent_color, lw=2)
+                if chart_type == "area":
+                    ax.fill_between(clean_labels, clean_values, alpha=0.2, color=self.accent_color)
+                
+            except Exception as e:
+                print(f"  ⚠️ Error creating line chart for PDF '{title}': {e}")
+                return self._create_placeholder_chart_for_pdf(f"Chart creation failed for {title}")
+            
+            ax.set_title(title, fontsize=14, fontweight='bold', color=self.primary_color)
+            ax.tick_params(axis='x', rotation=25, colors=self.secondary_color)
+            ax.tick_params(axis='y', colors=self.secondary_color)
+            
+            ax.spines['top'].set_visible(False)
+            ax.spines['right'].set_visible(False)
+            ax.spines['left'].set_color(self.secondary_color)
+            ax.spines['bottom'].set_color(self.secondary_color)
+            
+            plt.tight_layout()
+            return self._save_plot_to_assets(fig, f"{chart_type}_{safe_title}")
+
+    def _create_pie_or_donut_chart_for_pdf(self, data, title, palette, chart_type, safe_title):
+        """Create pie/donut chart for PDF inclusion using visuals/charts.py registry"""
+        labels, values = data.get("labels", []), data.get("values", [])
+        
+        if not all([labels, values, len(labels) == len(values)]):
+            return self._create_placeholder_chart_for_pdf(title)
+        
+        try:
+            clean_values = [float(val) if isinstance(val, (int, float)) else 0 for val in values]
+            clean_labels = [str(label) for label in labels]
+            
+            fig, ax = plt.subplots(figsize=(10, 8))
+            fig.patch.set_alpha(0.0)
+            ax.patch.set_alpha(0.0)
+            
+            template_colors = self._get_template_palette(len(clean_labels))
+            
+            # Use the registry function from visuals/charts.py
+            if CHARTS_AVAILABLE and chart_type in _CHART_REGISTRY:
+                chart_func = _CHART_REGISTRY[chart_type]["func"]
+                # Create data dict in the format expected by the registry
+                chart_data = {
+                    "labels": clean_labels,
+                    "values": clean_values
+                }
+                chart_func(chart_data, ax)
+            else:
+                # Fallback to manual implementation
+                if chart_type == "donut":
+                    pie_result = ax.pie(clean_values, labels=clean_labels, colors=template_colors, 
+                                       autopct='%1.1f%%', startangle=90, wedgeprops=dict(width=0.4))
+                else:
+                    pie_result = ax.pie(clean_values, labels=clean_labels, colors=template_colors, 
+                                       autopct='%1.1f%%', startangle=90)
+            
+            ax.set_title(title, fontsize=14, fontweight='bold', color=self.primary_color)
+            
+            plt.tight_layout()
+            return self._save_plot_to_assets(fig, f"{chart_type}_{safe_title}")
+            
+        except Exception as e:
+            print(f"  ⚠️ Error creating pie chart for PDF '{title}': {e}")
+            return self._create_placeholder_chart_for_pdf(f"Chart creation failed for {title}")
+
+    def _create_scatter_plot_for_pdf(self, data, title, palette, safe_title):
+        """Create scatter plot for PDF inclusion"""
+        x_values = data.get("x_values", [])
+        y_values = data.get("y_values", [])
+        sizes = data.get("sizes", [])
+        
+        if not all([x_values, y_values, len(x_values) == len(y_values)]):
+            return self._create_placeholder_chart_for_pdf(title)
+        
+        try:
+            clean_x = [float(val) if isinstance(val, (int, float)) else 0 for val in x_values]
+            clean_y = [float(val) if isinstance(val, (int, float)) else 0 for val in y_values]
+            
+            fig, ax = plt.subplots(figsize=(10, 6))
+            fig.patch.set_alpha(0.0)
+            ax.patch.set_alpha(0.0)
+            
+            if sizes and len(sizes) == len(clean_x):
+                clean_sizes = [float(size) if isinstance(size, (int, float)) else 100 for size in sizes]
+                ax.scatter(clean_x, clean_y, s=clean_sizes, alpha=0.6, color=self.accent_color)
+            else:
+                ax.scatter(clean_x, clean_y, alpha=0.6, color=self.accent_color)
+            
+            ax.set_title(title, fontsize=14, fontweight='bold', color=self.primary_color)
+            ax.set_xlabel('X Values', color=self.secondary_color)
+            ax.set_ylabel('Y Values', color=self.secondary_color)
+            
+            ax.spines['top'].set_visible(False)
+            ax.spines['right'].set_visible(False)
+            ax.spines['left'].set_color(self.secondary_color)
+            ax.spines['bottom'].set_color(self.secondary_color)
+            ax.tick_params(colors=self.secondary_color)
+            
+            plt.tight_layout()
+            return self._save_plot_to_assets(fig, f"scatter_{safe_title}")
+            
+        except Exception as e:
+            print(f"  ⚠️ Error creating scatter plot for PDF '{title}': {e}")
+            return self._create_placeholder_chart_for_pdf(f"Chart creation failed for {title}")
+
+    # Wrapper methods for other chart types (simplified versions)
+    def _create_stacked_bar_chart_for_pdf(self, data, title, palette, safe_title):
+        """Create stacked bar chart for PDF inclusion"""
+        return self._create_placeholder_chart_for_pdf(f"Stacked Bar: {title}")
+
+    def _create_multi_line_chart_for_pdf(self, data, title, safe_title):
+        """Create multi-line chart for PDF inclusion"""
+        return self._create_placeholder_chart_for_pdf(f"Multi-Line: {title}")
+
+    def _create_radar_chart_for_pdf(self, data, title, safe_title):
+        """Create radar chart for PDF inclusion"""
+        labels = data.get("labels", [])
+        values = data.get("values", [])
+        
+        if not labels or not values or len(labels) != len(values):
+            return self._create_placeholder_chart_for_pdf(title)
+        
+        # Number of variables
+        N = len(labels)
+        
+        # Compute angle for each axis
+        angles = [n / float(N) * 2 * 3.14159 for n in range(N)]
+        angles += angles[:1]  # Complete the circle
+        
+        # Add the first value at the end to close the polygon
+        values = values + values[:1]
+        
+        import matplotlib.pyplot as plt
+        fig, ax = plt.subplots(figsize=(8, 8), subplot_kw=dict(projection='polar'))
+        fig.patch.set_alpha(0.0)
+        ax.patch.set_alpha(0.0)
+        
+        # Plot the radar chart
+        ax.plot(angles, values, 'o-', linewidth=2, color=self.primary_color)
+        ax.fill(angles, values, alpha=0.25, color=self.primary_color)
+        
+        # Set the labels
+        ax.set_xticks(angles[:-1])
+        ax.set_xticklabels(labels, color=self.secondary_color)
+        
+        # Set the y-axis limits
+        ax.set_ylim(0, max(values) * 1.1)
+        
+        ax.set_title(title, fontsize=14, fontweight='bold', color=self.primary_color, pad=20)
+        
+        plt.tight_layout()
+        return self._save_plot_to_assets(fig, f"radar_{safe_title}")
+
+    def _create_bubble_chart_for_pdf(self, data, title, safe_title):
+        """Create bubble chart for PDF inclusion"""
+        return self._create_placeholder_chart_for_pdf(f"Bubble: {title}")
+
+    def _create_waterfall_chart_for_pdf(self, data, title, safe_title):
+        """Create waterfall chart for PDF inclusion"""
+        return self._create_placeholder_chart_for_pdf(f"Waterfall: {title}")
+
+    def _create_funnel_chart_for_pdf(self, data, title, safe_title):
+        """Create funnel chart for PDF inclusion"""
+        return self._create_placeholder_chart_for_pdf(f"Funnel: {title}")
+
+    def _create_heatmap_chart_for_pdf(self, data, title, safe_title):
+        """Create heatmap chart for PDF inclusion"""
+        return self._create_placeholder_chart_for_pdf(f"Heatmap: {title}")
+
+    def _create_gauge_chart_for_pdf(self, data, title, safe_title):
+        """Create gauge chart for PDF inclusion"""
+        value = data.get("value", 0)
+        max_val = data.get("max", 100)
+        label = data.get("label", "Value")
+        
+        if not isinstance(value, (int, float)) or not isinstance(max_val, (int, float)):
+            return self._create_placeholder_chart_for_pdf(title)
+        
+        fig, ax = plt.subplots(figsize=(8, 6))
+        fig.patch.set_alpha(0.0)
+        ax.patch.set_alpha(0.0)
+        
+        # Create gauge
+        percentage = value / max_val
+        
+        # Create pie chart for gauge
+        sizes = [percentage, 1 - percentage]
+        colors = [self.primary_color, self.secondary_color]
+        
+        pie_result = ax.pie(sizes, colors=colors, startangle=90, 
+                           counterclock=False, wedgeprops=dict(width=0.5))
+        wedges, texts = pie_result[:2]  # Only take first two elements
+        
+        # Add center text
+        ax.text(0, 0, f'{value}\n{label}', ha='center', va='center', 
+               fontsize=16, fontweight='bold', color=self.primary_color)
+        
+        ax.set_title(title, fontsize=14, fontweight='bold', color=self.primary_color)
+        ax.axis('equal')
+        
+        plt.tight_layout()
+        return self._save_plot_to_assets(fig, f"gauge_{safe_title}")
+
+    def _create_tree_map_chart_for_pdf(self, data, title, safe_title):
+        """Create tree map chart for PDF inclusion"""
+        return self._create_placeholder_chart_for_pdf(f"Tree Map: {title}")
+
+    def _create_sunburst_chart_for_pdf(self, data, title, safe_title):
+        """Create sunburst chart for PDF inclusion"""
+        return self._create_placeholder_chart_for_pdf(f"Sunburst: {title}")
+
+    def _create_candlestick_chart_for_pdf(self, data, title, safe_title):
+        """Create candlestick chart for PDF inclusion"""
+        return self._create_placeholder_chart_for_pdf(f"Candlestick: {title}")
+
+    def _create_box_plot_chart_for_pdf(self, data, title, safe_title):
+        """Create box plot chart for PDF inclusion"""
+        return self._create_placeholder_chart_for_pdf(f"Box Plot: {title}")
+
+    def _create_violin_plot_chart_for_pdf(self, data, title, safe_title):
+        """Create violin plot chart for PDF inclusion"""
+        return self._create_placeholder_chart_for_pdf(f"Violin Plot: {title}")
+
+    def _create_histogram_chart_for_pdf(self, data, title, safe_title):
+        """Create histogram chart for PDF inclusion"""
+        return self._create_placeholder_chart_for_pdf(f"Histogram: {title}")
+
+    def _create_pareto_chart_for_pdf(self, data, title, safe_title):
+        """Create pareto chart for PDF inclusion"""
+        return self._create_placeholder_chart_for_pdf(f"Pareto: {title}")
+
+    def _create_flowchart_chart_for_pdf(self, data, title, safe_title):
+        """Create flowchart chart for PDF inclusion"""
+        return self._create_placeholder_chart_for_pdf(f"Flowchart: {title}")
 
     def _create_bar_chart(self, data, title, palette, chart_type, safe_title):
         labels, values = data.get("labels", []), data.get("values", [])

@@ -86,7 +86,7 @@ def render_donut(data: dict, ax: plt.Axes | None = None):
     values = data.get("values", [])
     if labels and values:
         ax.pie(values, labels=labels, autopct='%1.1f%%', 
-               wedgeprops=dict(width=0.4))
+               wedgeprops=dict(width=0.4), pctdistance=0.80)
 
 @chart(name="scatter", goal="correlation", dims="2D", complexity="medium")
 def render_scatter(data: dict, ax: plt.Axes | None = None):
@@ -173,8 +173,26 @@ def render_heatmap(data: dict, ax: plt.Axes | None = None):
     """Heatmap for correlation matrix or 2D data."""
     ax = ax or plt.gca()
     values = data.get("values", [])
+    labels = data.get("labels", [])
+    categories = data.get("categories", [])
+    
     if values and isinstance(values[0], list):
-        im = ax.imshow(values, cmap='YlOrRd')
+        # Use seaborn for better heatmap visualization
+        import pandas as pd
+        
+        # Create DataFrame for seaborn heatmap
+        df = pd.DataFrame(values, index=categories, columns=labels)
+        sns.heatmap(df, annot=True, fmt='.0f', cmap='YlOrRd', ax=ax)
+        ax.set_title('Heatmap Analysis')
+    elif values and labels and categories:
+        # Fallback: create simple heatmap from 1D data
+        import numpy as np
+        data_matrix = np.array(values, dtype=float).reshape(len(categories), len(labels))
+        im = ax.imshow(data_matrix, cmap='YlOrRd')
+        ax.set_xticks(range(len(labels)))
+        ax.set_yticks(range(len(categories)))
+        ax.set_xticklabels(labels)
+        ax.set_yticklabels(categories)
         plt.colorbar(im, ax=ax)
 
 @chart(name="waterfall", goal="flow", dims="1D", complexity="advanced")
@@ -288,8 +306,24 @@ def render_pareto(data: dict, ax: plt.Axes | None = None):
     ax = ax or plt.gca()
     labels = data.get("labels", [])
     values = data.get("values", [])
+    cumulative = data.get("cumulative", [])
+    
     if labels and values:
-        ax.bar(labels, values)
+        # Create primary axis for bars
+        ax.bar(labels, values, alpha=0.7, color='skyblue')
+        ax.set_xlabel('Categories')
+        ax.set_ylabel('Frequency', color='skyblue')
+        
+        # Create secondary axis for cumulative line
+        if cumulative:
+            ax2 = ax.twinx()
+            ax2.plot(labels, cumulative, 'r-', marker='o', linewidth=2, color='red')
+            ax2.set_ylabel('Cumulative %', color='red')
+            ax2.tick_params(axis='y', labelcolor='red')
+        
+        # Rotate x-axis labels for better readability
+        ax.tick_params(axis='x', rotation=45)
+        ax.set_title('Pareto Analysis')
 
 @chart(name="flowchart", goal="flow", dims="2D", complexity="advanced")
 def render_flowchart(data: dict, ax: plt.Axes | None = None):

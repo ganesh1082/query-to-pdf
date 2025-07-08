@@ -51,10 +51,82 @@ class FirecrawlReportGenerator:
         # Use the Gemini model from firecrawl_research instead of creating a new one
         self.gemini_model = self.firecrawl_research.gemini_model
     
+    async def collect_learnings_only(self, query: str) -> Dict[str, Any]:
+        """Collect learnings from Firecrawl without generating a full report"""
+        print(f"🌐 Collecting learnings for: {query}")
+        
+        # Check if Firecrawl URL is available
+        firecrawl_url = os.getenv('FIRECRAWL_API_URL')
+        if not firecrawl_url:
+            print("❌ ERROR: FIRECRAWL_API_URL not configured")
+            return {
+                "success": False,
+                "error": "FIRECRAWL_API_URL not configured",
+                "learnings": [],
+                "sources": []
+            }
+        
+        print(f"🌐 Using Firecrawl URL: {firecrawl_url}")
+        
+        # Run Firecrawl research
+        try:
+            print("🔍 Starting deep research...")
+            research_result = await self.firecrawl_research.deep_research(query)
+            
+            learnings = research_result.get("learnings", [])
+            source_metadata = research_result.get("source_metadata", [])
+            requests_used = research_result.get("requests_used", 0)
+            
+            print(f"📈 Research completed:")
+            print(f"   - Learnings found: {len(learnings)}")
+            print(f"   - Sources found: {len(source_metadata)}")
+            print(f"   - Requests used: {requests_used}")
+            
+            # Check if research was successful (found learnings and sources)
+            if not learnings or not source_metadata:
+                print(f"⚠️ Firecrawl research returned no learnings or sources")
+                return {
+                    "success": False,
+                    "error": "No learnings or sources found",
+                    "learnings": [],
+                    "sources": []
+                }
+            
+            # Convert source metadata to the format expected by template
+            sources = []
+            for source in source_metadata:
+                if isinstance(source, dict):
+                    sources.append({
+                        "url": source.get("url", ""),
+                        "domain": source.get("domain", ""),
+                        "reliability_score": source.get("reliability_score", 0.5),
+                        "reliability_reasoning": source.get("reliability_reasoning", ""),
+                        "title": source.get("title", ""),
+                        "content_length": source.get("content_length", 0)
+                    })
+            
+            return {
+                "success": True,
+                "learnings": learnings,
+                "sources": sources,
+                "requests_used": requests_used,
+                "method": "web_research"
+            }
+            
+        except Exception as e:
+            print(f"❌ Web research failed: {e}")
+            print(f"   Traceback: {traceback.format_exc()}")
+            return {
+                "success": False,
+                "error": str(e),
+                "learnings": [],
+                "sources": []
+            }
+    
     async def generate_report_from_web_research(self, query: str, page_count: int = 8, 
                                                report_type: ReportType = ReportType.MARKET_RESEARCH,
                                                template: str = "template_1") -> Dict[str, Any]:
-        """Generate a complete report using real-time web research"""
+        """Legacy method - kept for backward compatibility"""
         print(f"🌐 Starting web research for: {query}")
         print(f"📊 Report configuration:")
         print(f"   - Page count: {page_count}")
@@ -251,62 +323,83 @@ Return only valid JSON:
                 template_path=f"templates/{template}.typ",
                 output_path=output_filename
             )
+            
             if success:
-                print(f"✅ PDF generated: {output_filename}")
+                print(f"✅ PDF generated successfully: {output_filename}")
                 return output_filename
             else:
-                print(f"❌ PDF generation failed")
+                print("❌ Failed to generate PDF")
                 return ""
+                
         except Exception as e:
-            print(f"❌ PDF generation failed: {e}")
+            print(f"❌ Error generating PDF: {e}")
             return ""
     
     async def _fallback_report_generation(self, query: str, page_count: int, report_type: ReportType, template: str) -> Dict[str, Any]:
-        """Fallback to AI-generated content when web research fails"""
-        print("🔄 Falling back to AI-generated content")
+        """Fallback to AI-only report generation when web research fails"""
+        print("🔄 Falling back to AI-only report generation...")
         
-        # Use the existing report planner
-        blueprint = await self.report_planner.generate_report_blueprint(query, page_count, report_type)
-        
-        if not blueprint:
-            print("❌ Both web research and AI generation failed")
-            return {"success": False, "error": "Failed to generate report"}
-        
-        # Generate visualizations
-        await self._generate_visualizations(blueprint)
-        
-        # Generate PDF
-        pdf_path = await self._generate_pdf(blueprint, query, template)
-        
-        return {
-            "success": True,
-            "pdf_path": pdf_path,
-            "blueprint": blueprint,
-            "method": "ai_generated",
-            "credits_used": 0
-        }
+        try:
+            # Generate blueprint using only AI
+            blueprint = await self.report_planner.generate_report_blueprint(
+                query, page_count, report_type
+            )
+            
+            if not blueprint:
+                return {
+                    "success": False,
+                    "error": "Failed to generate report blueprint"
+                }
+            
+            # Generate visualizations
+            await self._generate_visualizations(blueprint)
+            
+            # Generate PDF
+            pdf_path = await self._generate_pdf(blueprint, query, template)
+            
+            return {
+                "success": True,
+                "pdf_path": pdf_path,
+                "blueprint": blueprint,
+                "method": "ai_only",
+                "requests_used": 0,
+                "learnings_count": 0,
+                "sources_count": 0,
+                "learnings": [],
+                "sources": []
+            }
+            
+        except Exception as e:
+            print(f"❌ Fallback generation failed: {e}")
+            return {
+                "success": False,
+                "error": str(e)
+            }
 
 
-# Example usage
 async def main():
-    """Example usage of FirecrawlReportGenerator"""
-    generator = FirecrawlReportGenerator(
-        gemini_api_key="your_gemini_api_key_here"
-    )
+    """Test the Firecrawl integration"""
+    gemini_api_key = os.getenv('GEMINI_API_KEY')
+    if not gemini_api_key:
+        print("❌ GEMINI_API_KEY not found in environment variables")
+        return
     
-    result = await generator.generate_report_from_web_research(
-        query="Tesla electric vehicle market analysis 2024",
-        page_count=8,
-        report_type=ReportType.MARKET_RESEARCH
-    )
+    generator = FirecrawlReportGenerator(gemini_api_key)
+    
+    # Test query
+    query = "Tesla electric vehicle market analysis 2024"
+    
+    print(f"🧪 Testing Firecrawl integration with query: {query}")
+    
+    # Test learnings collection only
+    result = await generator.collect_learnings_only(query)
     
     if result["success"]:
-        print(f"✅ Report generated successfully!")
-        print(f"📄 PDF: {result['pdf_path']}")
-        print(f"💳 Credits used: {result['requests_used']}")
-        print(f"🔍 Method: {'web_research' if 'sources' in result else 'ai_generated'}")
+        print(f"✅ Successfully collected {len(result['learnings'])} learnings")
+        print(f"📊 Sources: {len(result['sources'])}")
+        print(f"🌐 Requests used: {result['requests_used']}")
     else:
-        print(f"❌ Report generation failed: {result.get('error', 'Unknown error')}")
+        print(f"❌ Failed to collect learnings: {result.get('error', 'Unknown error')}")
 
 
 if __name__ == "__main__":

@@ -44,6 +44,7 @@ class AdvancedContentGenerator:
             from visuals.charts import get_chart_catalog
             catalog = get_chart_catalog()
             if catalog:
+                print(f"  ✅ Loaded {len(catalog)} charts from visuals.charts")
                 return catalog
         except Exception as e:
             print(f"  ⚠️ Could not load chart catalog: {e}")
@@ -56,23 +57,25 @@ class AdvancedContentGenerator:
             "candlestick", "boxPlot", "violinPlot", "histogram",
             "pareto", "flowchart", "none",
         ]
-        return {t: {"goal": "generic", "dims": "nD", "complexity": "medium"}
+        fallback_catalog = {t: {"goal": "generic", "dims": "nD", "complexity": "medium"}
                 for t in legacy_types}
+        print(f"  ⚠️ Using fallback catalog with {len(fallback_catalog)} charts")
+        return fallback_catalog
 
     async def generate_full_report_blueprint(self, query: str, page_count: int) -> Optional[Dict[str, Any]]:
-        """Generates a complete report blueprint including titles, chart data, and narrative content."""
+        """Generate a complete report blueprint using Gemini AI."""
         if not self.model:
-            print("  ⚠️ Gemini not available. Using mock data.")
-            return self._get_mock_report_blueprint(query)
-
-        num_sections = max(8, min(14, int(page_count / 1.5)))
+            print("❌ ERROR: Gemini API not available. Cannot generate report without AI capabilities.")
+            raise RuntimeError("Gemini API not available - cannot generate report")
         
-        # Get dynamic chart catalog
-        chart_catalog = self._get_chart_catalog()
-        chart_names_str = "|".join(chart_catalog.keys())
-        charts_json = json.dumps(chart_catalog, indent=2)
-
-        prompt = f"""
+        try:
+            # Calculate number of sections based on page count
+            num_sections = max(8, page_count * 2)  # Minimum 8 sections, 2 per page
+            
+            # Get chart catalog for dynamic chart selection
+            chart_catalog = self._get_chart_catalog()
+            
+            prompt = f"""
 Act as a team of senior strategy consultants from a top-tier firm like McKinsey, BCG, or Kearney. Your task is to create a complete, comprehensive, in-depth, and data-driven professional report of approximately {page_count} pages. The report is market research on the topic of: "{query}". The target audience is senior executives and decision makers.
 
 Your output MUST be a single, complete, and well-formed JSON object, ready for parsing.
@@ -82,87 +85,68 @@ The JSON object must adhere to this exact structure:
 - The "sections" key must contain a list of exactly {num_sections} section objects.
 
 Each section object in the list MUST contain the following four keys:
-1.  "title": A relevant, insightful, and professional title for the section.
-2.  "content": A comprehensive, detailed, well-structured narrative (600-1000 words) using Typst-friendly markdown. Use `**bold text**` for subheadings or emphasis, and `-` for bullet points. The narrative MUST provide extensive context, detailed analysis, strategic insights, and comprehensive coverage of the topic. Include detailed market analysis, competitive landscape, industry trends, case studies, quantitative insights, and strategic frameworks.
-3.  "chart_type": The most effective chart type to visualize the section's data. Choose from a diverse mix of available chart types. Use "none" only for text-heavy sections.
-4.  "chart_data": A JSON object containing plausible, realistic data that supports the 'content'.
-    - For "bar", "line", "pie", "donut", "horizontalBar": Use the format `{{"labels": ["A", "B"], "values": [10, 20]}}`.
-    - For "scatter": Use the format `{{"x_values": [1, 2], "y_values": [10, 20], "sizes": [100, 200]}}`.
-    - For "none" chart_type, use an empty object: `{{}}`.
+1.  "title": A specific, detailed, and professional title that clearly indicates the section's focus and scope.
+2.  "content": A comprehensive, detailed, well-structured narrative (2000-3500 words) using Typst-friendly markdown. Use `**bold text**` for subheadings or emphasis, and `-` for bullet points. The narrative MUST provide extensive context, detailed analysis, strategic insights, and comprehensive coverage of the topic. Include detailed market analysis, competitive landscape, industry trends, case studies, quantitative insights, strategic frameworks, and specific data points. Each section should be substantial and thorough with extensive depth and analysis.
+3.  "chart_type": The most appropriate chart type from this catalog: {list(chart_catalog.keys())}. Choose the chart type that best visualizes the section's key data points and insights. Use "none" if no chart is appropriate.
+4.  "chart_data": A JSON object with the appropriate data structure for the chosen chart type. The data MUST be realistic, relevant to the section content, and include detailed labels and values that directly support the section's analysis. Ensure the data is specific, accurate, and provides meaningful insights.
 
-**Report Structure and Content Requirements:**
+IMPORTANT REQUIREMENTS:
+- Each section must be comprehensive and detailed (2000-3500 words minimum)
+- Chart data must be highly relevant and specific to each section's content
+- Use realistic, current data and statistics
+- Include specific company names, market figures, and industry insights
+- Ensure all content is professional and executive-level quality
+- Make sure chart labels and values directly relate to the section's analysis
+- Include detailed market analysis, competitive insights, and strategic recommendations
 
--   **Section 1: Executive Summary.** This MUST be the first section. It should provide a comprehensive synthesis of the entire report's findings, strategic insights, and recommendations. Include detailed market overview, key trends, competitive dynamics, and strategic implications. `chart_type` must be "none".
--   **Core Analysis Sections:** The middle sections should follow a logical flow, such as:
-    -   Introduction / Problem Landscape (comprehensive market overview and problem definition)
-    -   Key Market Drivers & Trends (detailed analysis of market forces and emerging trends)
-    -   Data-Driven Analysis (e.g., Market Sizing, Competitive Landscape, Consumer Behavior, Financial Performance)
-    -   Strategic Frameworks or Case Studies (detailed application of business frameworks and real-world examples)
-    -   Technology and Innovation Analysis (if applicable)
-    -   Regulatory and Policy Environment (if applicable)
--   **Final Sections:** The report MUST conclude with the following sections, in order:
-    -   "Strategic Recommendations" (`chart_type`: "none") - Comprehensive actionable roadmap with detailed implementation guidance
-    -   "Risk Assessment & Mitigation" (`chart_type`: "none") - Detailed risk analysis with mitigation strategies
+Respond with ONLY valid JSON format, no additional text or explanations. Use this exact structure:
 
-**Content Quality Requirements:**
-- Each section must be comprehensive and thorough, providing substantial depth and analysis
-- Include detailed market insights, competitive analysis, and strategic implications
-- Provide extensive supporting evidence and data-driven insights
-- Use professional business language suitable for C-suite executives
-- Include quantitative analysis, statistical insights, and trend analysis
-- Provide comprehensive case studies and real-world examples where applicable
-- Apply strategic frameworks (PESTLE, Porter's Five Forces, SWOT, etc.) in detail
+{{
+  "sections": [
+    {{
+      "title": "specific section title",
+      "content": "comprehensive content with detailed analysis",
+      "chart_type": "appropriate_chart_type",
+      "chart_data": {{
+        "labels": ["detailed", "relevant", "labels"],
+        "values": [realistic, values, here]
+      }}
+    }}
+  ]
+}}
 
-Ensure all generated data is plausible and all content is professionally written, analytical, and insightful, suitable for the target audience.
-
-AVAILABLE_CHARTS_METADATA:
-{charts_json}
-
-AVAILABLE_CHART_TYPES: {chart_names_str}
-
-OUTPUT ONLY THE COMPLETE JSON OBJECT, WRAPPED IN ```json ... ```. DO NOT INCLUDE ANY OTHER TEXT, EXPLANATION, OR APOLOGIES.
+Ensure all property names are in double quotes and all string values are properly escaped.
 """
-        
-        try:
-            print(f"  🧠 Generating full {num_sections}-section report blueprint with Gemini...")
-            print(f"  🔍 Using API key: {self.model.api_key[:10]}..." if hasattr(self.model, 'api_key') else "  🔍 API key configured")
-            
+
             generation_config = genai.types.GenerationConfig(
                 temperature=float(os.getenv('GEMINI_TEMPERATURE', 0.6)),
-                max_output_tokens=int(os.getenv('GEMINI_MAX_OUTPUT_TOKENS', 8192))
+                max_output_tokens=int(os.getenv('GEMINI_MAX_OUTPUT_TOKENS', 32768))
             )
+            
             response = await self.model.generate_content_async(prompt, generation_config=generation_config)
             
-            print(f"  🔍 AI Response received, length: {len(response.text)} characters")
-            print(f"  🔍 Response preview: {response.text[:200]}...")
+            if not response or not response.text:
+                print("❌ ERROR: No response from Gemini API")
+                raise RuntimeError("No response from Gemini API")
             
-            # Multiple strategies to extract JSON from the response
-            json_data = self._extract_json_from_response(response.text)
-            if json_data:
-                print("  ✅ Successfully generated and parsed full report blueprint.")
-                print(f"  🔍 Found {len(json_data.get('sections', []))} sections")
-                return json_data
+            # Extract JSON from response
+            extracted_data = self._extract_json_from_response(response.text)
+            
+            if extracted_data and "sections" in extracted_data:
+                sections = extracted_data["sections"]
+                if len(sections) >= 8:  # Ensure minimum sections
+                    print(f"✅ Successfully generated report blueprint with {len(sections)} sections")
+                    return extracted_data
+                else:
+                    print(f"❌ ERROR: Insufficient sections generated ({len(sections)} < 8 minimum)")
+                    raise RuntimeError(f"Insufficient sections: {len(sections)} < 8 minimum")
             else:
-                print("❌ Could not extract valid JSON from AI response. Using mock data.")
-                print("  🔍 This indicates the AI response format was not as expected.")
-                return self._get_mock_report_blueprint(query)
+                print("❌ ERROR: Could not extract valid JSON from AI response")
+                raise RuntimeError("Invalid JSON response from Gemini API")
                 
         except Exception as e:
-            print(f"❌ Error generating full report blueprint: {e}")
-            print(f"  🔍 Error type: {type(e).__name__}")
-            # Only try to access response.text if response exists
-            if 'response' in locals() and hasattr(response, 'text'):
-                print(f"  ⚠️ Raw AI response was:\n---\n{response.text[:1000]}...\n---")
-                # Try to save the raw response for debugging
-                try:
-                    with open("debug_ai_response.txt", "w", encoding="utf-8") as f:
-                        f.write(response.text)
-                    print("  📝 Saved raw AI response to debug_ai_response.txt for analysis")
-                except Exception as save_error:
-                    print(f"  ⚠️ Could not save debug file: {save_error}")
-            else:
-                print("  ⚠️ No response object available")
-            return self._get_mock_report_blueprint(query)
+            print(f"❌ ERROR: Failed to generate report blueprint: {e}")
+            raise RuntimeError(f"Report generation failed: {e}")
 
     def _repair_json(self, json_str: str) -> str:
         """Attempts to repair common JSON formatting issues."""
@@ -309,48 +293,3 @@ OUTPUT ONLY THE COMPLETE JSON OBJECT, WRAPPED IN ```json ... ```. DO NOT INCLUDE
         
         print("  ❌ All JSON extraction strategies failed")
         return None
-
-    def _get_mock_report_blueprint(self, query: str = "general topic") -> Dict[str, Any]:
-        """Provides a complete fallback blueprint with all content if the AI fails."""
-        print("  📝 Using mock report blueprint as a fallback.")
-        
-        # Generate dynamic content based on the query
-        query_lower = query.lower()
-        
-        if "google" in query_lower or "alphabet" in query_lower:
-            return {
-                "sections": [
-                    {"title": "Executive Summary", "content": "**Overview:** This report provides a comprehensive analysis of Google (Alphabet Inc.), one of the world's leading technology companies. Founded in 1998, Google has evolved from a search engine to a global technology conglomerate with diverse business interests.", "chart_type": "none", "chart_data": {}, "chart_path": ""},
-                    {"title": "Revenue Breakdown by Segment", "content": "**Financial Analysis:** Google's revenue is primarily driven by advertising, with Google Search and YouTube being the major contributors. Google Cloud and other ventures represent growing segments of the business.", "chart_type": "pie", "chart_data": {"labels": ["Search Advertising", "Network Advertising", "Google Cloud", "Other"], "values": [55, 15, 15, 15]}, "chart_path": "temp_charts/pie_RevenueBreakdownbySegment.png"},
-                    {"title": "Market Share in Digital Advertising", "content": "**Competitive Position:** Google dominates the digital advertising market alongside Meta, controlling a significant portion of global ad spend through its search and display networks.", "chart_type": "bar", "chart_data": {"labels": ["Google", "Meta", "Amazon", "Others"], "values": [28, 20, 11, 41]}, "chart_path": "temp_charts/bar_MarketShareinDigitalAdvertisin.png"},
-                    {"title": "Strategic Recommendations", "content": "**Future Outlook:** Google should continue investing in AI and cloud services while addressing regulatory challenges and maintaining its competitive edge in search and advertising.", "chart_type": "none", "chart_data": {}, "chart_path": ""},
-                ]
-            }
-        elif "meta" in query_lower or "facebook" in query_lower:
-            return {
-                "sections": [
-                    {"title": "Executive Summary", "content": "**Overview:** Meta Platforms Inc. is a global technology company focused on connecting people through social media platforms. The company has evolved from Facebook to include Instagram, WhatsApp, and metaverse initiatives.", "chart_type": "none", "chart_data": {}, "chart_path": ""},
-                    {"title": "User Base by Platform", "content": "**Platform Analysis:** Meta's ecosystem includes multiple platforms with billions of users worldwide, creating a comprehensive social media network.", "chart_type": "pie", "chart_data": {"labels": ["Facebook", "Instagram", "WhatsApp", "Messenger"], "values": [35, 25, 25, 15]}, "chart_path": "temp_charts/pie_UserBasebyPlatform.png"},
-                    {"title": "Advertising Revenue Trends", "content": "**Financial Performance:** Meta's advertising revenue has shown strong growth, driven by targeted advertising capabilities and expanding user engagement.", "chart_type": "line", "chart_data": {"labels": ["2019", "2020", "2021", "2022", "2023"], "values": [70, 84, 115, 113, 132]}, "chart_path": "temp_charts/line_AdvertisingRevenueTrends.png"},
-                    {"title": "Strategic Recommendations", "content": "**Future Strategy:** Meta should focus on metaverse development, AI integration, and addressing privacy concerns while maintaining platform engagement.", "chart_type": "none", "chart_data": {}, "chart_path": ""},
-                ]
-            }
-        elif "apple" in query_lower:
-            return {
-                "sections": [
-                    {"title": "Executive Summary", "content": "**Overview:** Apple Inc. is a global technology leader known for its innovative hardware, software, and services. The company has built a premium brand ecosystem with strong customer loyalty.", "chart_type": "none", "chart_data": {}, "chart_path": ""},
-                    {"title": "Revenue by Product Category", "content": "**Product Analysis:** Apple's revenue is diversified across hardware, services, and accessories, with iPhone remaining the primary revenue driver.", "chart_type": "pie", "chart_data": {"labels": ["iPhone", "Mac", "iPad", "Services", "Other"], "values": [52, 10, 8, 20, 10]}, "chart_path": "temp_charts/pie_RevenuebyProductCategory.png"},
-                    {"title": "Global Market Share", "content": "**Competitive Position:** Apple maintains a strong position in premium smartphone and computer markets, with significant market share in key regions.", "chart_type": "bar", "chart_data": {"labels": ["Smartphones", "Tablets", "Laptops", "Smartwatches"], "values": [18, 35, 8, 30]}, "chart_path": "temp_charts/bar_GlobalMarketShare.png"},
-                    {"title": "Strategic Recommendations", "content": "**Growth Strategy:** Apple should continue innovating in services, expanding in emerging markets, and developing new product categories.", "chart_type": "none", "chart_data": {}, "chart_path": ""},
-                ]
-            }
-        else:
-            # Generic fallback for other topics
-            return {
-                "sections": [
-                    {"title": "Executive Summary", "content": f"**Overview:** This report provides a comprehensive analysis of {query}. The analysis covers key aspects including market trends, competitive landscape, and strategic implications.", "chart_type": "none", "chart_data": {}, "chart_path": ""},
-                    {"title": "Market Analysis", "content": "**Market Overview:** The market shows diverse trends with multiple players competing for market share. Understanding these dynamics is crucial for strategic decision-making.", "chart_type": "bar", "chart_data": {"labels": ["Segment A", "Segment B", "Segment C", "Segment D"], "values": [30, 25, 20, 25]}, "chart_path": "temp_charts/bar_MarketAnalysis.png"},
-                    {"title": "Trend Analysis", "content": "**Growth Trends:** Recent years have shown consistent growth patterns with some seasonal variations. Future projections indicate continued expansion.", "chart_type": "line", "chart_data": {"labels": ["2020", "2021", "2022", "2023", "2024"], "values": [100, 115, 130, 145, 160]}, "chart_path": "temp_charts/line_TrendAnalysis.png"},
-                    {"title": "Strategic Recommendations", "content": "**Action Items:** Based on the analysis, key recommendations include market expansion, technology investment, and strategic partnerships.", "chart_type": "none", "chart_data": {}, "chart_path": ""},
-                ]
-            }

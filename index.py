@@ -308,8 +308,8 @@ if __name__ == "__main__":
         if not _cleanup_done and exc_type is not None:
             # Check if this is a gRPC-related error
             error_str = str(exc_value).lower()
-            if any(keyword in error_str for keyword in ['grpc', 'absl', 'fork_posix']):
-                # Silently ignore gRPC-related errors
+            if any(keyword in error_str for keyword in ['grpc', 'absl', 'fork_posix', 'sys.excepthook']):
+                # Silently ignore gRPC-related errors and sys.excepthook errors
                 return
             
             # Show other errors normally
