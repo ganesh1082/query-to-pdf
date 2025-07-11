@@ -400,69 +400,8 @@ class PremiumVisualizationGenerator:
 
     def _generate_default_chart_data(self, chart_type: str, title: Optional[str]) -> Optional[Dict[str, Any]]:
         """Generate meaningful default chart data based on chart type and title."""
-        try:
-            if chart_type == "area":
-                # Generate area chart data with trend
-                return {
-                    "labels": ["2020", "2021", "2022", "2023", "2024", "2025"],
-                    "values": [100, 120, 140, 160, 180, 200]
-                }
-            elif chart_type == "line":
-                # Generate line chart data with growth trend
-                return {
-                    "labels": ["Q1", "Q2", "Q3", "Q4"],
-                    "values": [85, 95, 105, 115]
-                }
-            elif chart_type == "bar":
-                # Generate bar chart data
-                return {
-                    "labels": ["Category A", "Category B", "Category C", "Category D"],
-                    "values": [25, 35, 20, 20]
-                }
-            elif chart_type == "pie":
-                # Generate pie chart data
-                return {
-                    "labels": ["Primary", "Secondary", "Tertiary", "Other"],
-                    "values": [40, 30, 20, 10]
-                }
-            elif chart_type == "donut":
-                # Generate donut chart data
-                return {
-                    "labels": ["Segment 1", "Segment 2", "Segment 3", "Segment 4"],
-                    "values": [35, 25, 25, 15]
-                }
-            elif chart_type == "scatter":
-                # Generate scatter plot data
-                return {
-                    "labels": ["Point A", "Point B", "Point C", "Point D", "Point E"],
-                    "x_values": [10, 20, 30, 40, 50],
-                    "y_values": [15, 25, 35, 45, 55],
-                    "sizes": [100, 150, 200, 250, 300]
-                }
-            elif chart_type == "horizontalBar":
-                # Generate horizontal bar chart data
-                return {
-                    "labels": ["Group A", "Group B", "Group C", "Group D"],
-                    "values": [30, 25, 20, 25]
-                }
-            elif chart_type == "gauge":
-                # Generate gauge chart data
-                return {
-                    "value": 75,
-                    "max": 100,
-                    "label": "Performance Score"
-                }
-            elif chart_type == "radar":
-                # Generate radar chart data
-                return {
-                    "labels": ["Quality", "Speed", "Cost", "Innovation", "Service"],
-                    "values": [80, 70, 85, 75, 90]
-                }
-            else:
-                return None
-        except Exception as e:
-            print(f"  ⚠️ Error generating default data: {e}")
-            return None
+        # Return None to force dynamic data generation from Firecrawl research
+        return None
 
     def _create_placeholder_chart_for_pdf(self, title: str) -> str:
         """Creates a placeholder image in assets directory for PDF inclusion."""

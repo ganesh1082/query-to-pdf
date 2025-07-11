@@ -97,7 +97,7 @@ class ReportPlanner:
             if json_data and self._validate_blueprint_structure(json_data):
                 print("  ✅ Successfully generated valid report blueprint")
                 # Add fixed Executive Summary
-                json_data = self._add_fixed_executive_summary(json_data, query, report_type)
+                json_data = self._add_dynamic_executive_summary(json_data, query, report_type, learnings, source_metadata)
                 return json_data
             else:
                 print("  ❌ Invalid JSON structure. Using fallback data.")
@@ -148,7 +148,21 @@ class ReportPlanner:
         if source_metadata:
             sources_text = f"\nNumber of sources: {len(source_metadata)}. Prioritize high-reliability sources."
         
-        prompt = f"""You are an expert report writer and analyst. Create a comprehensive, professional, and highly detailed {page_count}-page report for: \"{query}\"\n\nCRITICAL: Output ONLY valid JSON. No explanations, no markdown formatting, just pure JSON.\n\nREPORT REQUIREMENTS:\n- Target sections: {num_sections} (but can be more if content requires it)\n- Report type: {report_type.value}\n- Target length: {page_count} pages\n- Target content per section: {target_words_per_section} words minimum\n- Content must be detailed, analytical, and comprehensive\n- Each section should be unique, non-repetitive, and deeply insightful\n- Use dynamic structure: include subheadings, examples, or case studies only where they are natural and add value (do NOT force them in every section)\n- Use examples, case studies, and subheadings only when relevant to the topic and context\n- Use research learnings as evidence, but do not just list or repeat them\n- Create as many sections as needed to cover the topic comprehensively (minimum {num_sections}, but can be more)\n{learnings_text}{sources_text}\n\nDYNAMIC SECTION GUIDELINES:\n- Create natural, relevant section titles based on the research topic and learnings\n- Use strategic frameworks (PESTLE, Porter's Five Forces, SWOT, etc.) where appropriate\n- Include data-driven insights with supporting evidence\n- Provide comprehensive analysis with multiple perspectives\n- Focus on actionable intelligence and strategic implications\n- Use subheadings, examples, and case studies only where they are natural and add value\n- Do NOT force subheadings/examples in every section\n- Create as many sections as needed to cover the topic comprehensively (minimum {num_sections}, but can be more)\n\nAVAILABLE CHART TYPES:\n{chart_catalog_text}\n\nREQUIRED JSON FORMAT:\n{{\n  \"sections\": [\n    {{\n      \"title\": \"Executive Summary\",\n      \"content\": \"FIXED CONTENT - will be replaced automatically\",\n      \"chart_type\": \"none\",\n      \"chart_data\": {{}}\n    }},\n    {{\n      \"title\": \"DYNAMIC SECTION TITLE\",\n      \"content\": \"DETAILED CONTENT (minimum {target_words_per_section} words) with dynamic structure: use subheadings, examples, or case studies only where they are natural and add value. Provide comprehensive analysis, data, and insights.\",\n      \"chart_type\": \"{chart_types_str}\",\n      \"chart_data\": {{}}\n    }}\n  ]\n}}\n\nDYNAMIC SECTION GUIDELINES:\n- Create natural, relevant section titles based on the research topic and learnings\n- Use strategic frameworks (PESTLE, Porter's Five Forces, SWOT, etc.) where appropriate\n- Include data-driven insights with supporting evidence\n- Provide comprehensive analysis with multiple perspectives\n- Focus on actionable intelligence and strategic implications\n- Use subheadings, examples, and case studies only where they are natural and add value\n- Do NOT force subheadings/examples in every section\n\nCONTENT REQUIREMENTS:\n1. Each section must contain detailed, comprehensive content (minimum {target_words_per_section} words)\n2. Include specific data points, statistics, and examples with detailed explanations where relevant\n3. Use **bold** for important headings within content\n4. Use - bullet points for key insights and findings\n5. Provide analytical insights and expert commentary with detailed reasoning\n6. Include relevant industry context and background information\n7. Make content engaging and informative for professional audience\n8. EXPAND on each point with detailed explanations and examples where appropriate\n9. Include multiple paragraphs with comprehensive analysis\n10. Add industry-specific terminology and expert insights\n11. Provide detailed market trends and future projections\n12. Include competitive analysis and strategic implications\n13. Use research learnings as evidence, but do not just list or repeat them\n\nCRITICAL UNIQUENESS REQUIREMENTS:\n- Each section must focus on a DIFFERENT aspect of the topic\n- Avoid repeating the same information across sections\n- Each section should have unique insights, data points, and analysis\n- Use different examples, case studies, and scenarios for each section where relevant\n- Ensure each section provides distinct value and perspective\n- Vary the analytical frameworks and methodologies used\n- Include different time periods, regions, or market segments in each section\n- Use different data sources and references for each section\n\nCHART SELECTION GUIDELINES:\n- Choose chart types based on the analytical goal of each section\n- Use 'trend' charts (line, area) for time-series data and growth analysis\n- Use 'comparison' charts (bar, horizontalBar, radar) for competitive analysis and rankings\n- Use 'composition' charts (pie, donut, stackedBar) for market segmentation and breakdowns\n- Use 'correlation' charts (scatter, bubble, heatmap) for relationship analysis\n- Use 'distribution' charts (histogram, boxPlot, violinPlot) for statistical analysis\n- Use 'flow' charts (waterfall, funnel, flowchart) for process and conversion analysis\n- Use 'none' for sections that don't require visual data representation\n\nCHART DATA EXAMPLES:\n- Bar chart: {{\"labels\": [\"A\", \"B\", \"C\"], \"values\": [10, 20, 30]}}\n- Horizontal bar: {{\"labels\": [\"A\", \"B\", \"C\"], \"values\": [10, 20, 30]}}\n- Line chart: {{\"labels\": [\"2020\", \"2021\", \"2022\"], \"values\": [100, 120, 140]}}\n- Pie chart: {{\"labels\": [\"Red\", \"Blue\", \"Green\"], \"values\": [30, 40, 30]}}\n- Donut chart: {{\"labels\": [\"Red\", \"Blue\", \"Green\"], \"values\": [30, 40, 30]}}\n- Scatter plot: {{\"labels\": [\"Point1\", \"Point2\", \"Point3\"], \"x_values\": [1, 2, 3], \"y_values\": [10, 20, 30]}}\n- Area chart: {{\"labels\": [\"2020\", \"2021\", \"2022\"], \"values\": [100, 120, 140]}}\n- Stacked bar: {{\"labels\": [\"Q1\", \"Q2\", \"Q3\"], \"series\": [{{\"name\": \"Product A\", \"values\": [10, 15, 20]}}, {{\"name\": \"Product B\", \"values\": [5, 12, 18]}}]}}\n- Multi-line: {{\"labels\": [\"Jan\", \"Feb\", \"Mar\"], \"series\": [{{\"name\": \"Revenue\", \"values\": [100, 120, 140]}}, {{\"name\": \"Profit\", \"values\": [20, 25, 30]}}]}}\n- Radar chart: {{\"labels\": [\"Quality\", \"Price\", \"Service\", \"Innovation\", \"Brand\"], \"values\": [85, 70, 90, 75, 80]}}\n- Bubble chart: {{\"labels\": [\"A\", \"B\", \"C\"], \"x_values\": [10, 20, 30], \"y_values\": [5, 15, 25], \"sizes\": [20, 40, 60]}}\n- Heatmap: {{\"labels\": [\"Q1\", \"Q2\", \"Q3\", \"Q4\"], \"categories\": [\"North\", \"South\", \"East\", \"West\"], \"values\": [[10, 20, 30, 40], [15, 25, 35, 45], [20, 30, 40, 50], [25, 35, 45, 55]]}}\n- Waterfall chart: {{\"labels\": [\"Start\", \"Revenue\", \"Costs\", \"Taxes\", \"End\"], \"values\": [100, 50, -30, -10, 110]}}\n- Funnel chart: {{\"labels\": [\"Leads\", \"Qualified\", \"Proposals\", \"Negotiations\", \"Closed\"], \"values\": [1000, 800, 600, 400, 200]}}\n- Gauge chart: {{\"value\": 75, \"max\": 100, \"label\": \"Performance\"}}\n- Tree map: {{\"labels\": [\"Category A\", \"Category B\", \"Category C\"], \"values\": [40, 30, 30], \"subcategories\": [[\"A1\", \"A2\"], [\"B1\", \"B2\"], [\"C1\", \"C2\"]]}}\n- Sunburst chart: {{\"labels\": [\"Root\", \"Branch1\", \"Branch2\"], \"values\": [100, 60, 40], \"children\": [[\"Leaf1\", \"Leaf2\"], [\"Leaf3\", \"Leaf4\"]]}}\n- Candlestick: {{\"labels\": [\"Day1\", \"Day2\", \"Day3\"], \"open\": [100, 105, 110], \"high\": [110, 115, 120], \"low\": [95, 100, 105], \"close\": [105, 110, 115]}}\n- Box plot: {{\"labels\": [\"Group A\", \"Group B\", \"Group C\"], \"data\": [[10, 15, 20, 25, 30], [12, 18, 22, 28, 35], [8, 12, 18, 24, 32]]}}\n- Violin plot: {{\"labels\": [\"Group A\", \"Group B\"], \"data\": [[10, 15, 20, 25, 30], [12, 18, 22, 28, 35]]}}\n- Histogram: {{\"labels\": [\"0-10\", \"11-20\", \"21-30\", \"31-40\"], \"values\": [5, 12, 8, 3]}}\n- Pareto chart: {{\"labels\": [\"Issue A\", \"Issue B\", \"Issue C\", \"Issue D\"], \"values\": [40, 30, 20, 10], \"cumulative\": [40, 70, 90, 100]}}\n- Empty: {{}}\n\nJSON RULES:\n1. All property names must be in double quotes\n2. All string values must be in double quotes\n3. Use commas between properties, not after the last one\n4. Escape quotes in content with backslash: \\"\n5. Use \\n for line breaks in content\n6. No trailing commas before }} or ]\n\nOUTPUT FORMAT:\n```json\n{{YOUR_JSON_HERE}}\n```"""
+        prompt = f"""You are an expert report writer and analyst. Create a comprehensive, professional, and highly detailed {page_count}-page report for: \"{query}\"\n\nCRITICAL: Output ONLY valid JSON. No explanations, no markdown formatting, just pure JSON.\n\nREPORT REQUIREMENTS:\n- Target sections: {num_sections} (but can be more if content requires it)\n- Report type: {report_type.value}\n- Target length: {page_count} pages\n- Target content per section: {target_words_per_section} words minimum\n- Content must be detailed, analytical, and comprehensive\n- Each section should be unique, non-repetitive, and deeply insightful\n- Use dynamic structure: include subheadings, examples, or case studies only where they are natural and add value (do NOT force them in every section)\n- Use examples, case studies, and subheadings only when relevant to the topic and context\n- Use research learnings as evidence, but do not just list or repeat them\n- Create as many sections as needed to cover the topic comprehensively (minimum {num_sections}, but can be more)\n{learnings_text}{sources_text}\n\nDYNAMIC SECTION GUIDELINES:\n- Create natural, relevant section titles based on the research topic and learnings\n- Use strategic frameworks (PESTLE, Porter's Five Forces, SWOT, etc.) where appropriate\n- Include data-driven insights with supporting evidence\n- Provide comprehensive analysis with multiple perspectives\n- Focus on actionable intelligence and strategic implications\n- Use subheadings, examples, and case studies only where they are natural and add value\n- Do NOT force subheadings/examples in every section\n- Create as many sections as needed to cover the topic comprehensively (minimum {num_sections}, but can be more)\n\nAVAILABLE CHART TYPES:\n{chart_catalog_text}\n\nREQUIRED JSON FORMAT:\n{{\n  \"sections\": [\n    {{\n      \"title\": \"Executive Summary\",\n      \"content\": \"FIXED CONTENT - will be replaced automatically\",\n      \"chart_type\": \"none\",\n      \"chart_data\": {{}}\n    }},\n    {{\n      \"title\": \"DYNAMIC SECTION TITLE\",\n      \"content\": \"DETAILED CONTENT (minimum {target_words_per_section} words) with dynamic structure: use subheadings, examples, or case studies only where they are natural and add value. Provide comprehensive analysis, data, and insights.\",\n      \"chart_type\": \"{chart_types_str}\",\n      \"chart_data\": {{}}\n    }}\n  ]\n}}\n\nDYNAMIC SECTION GUIDELINES:\n- Create natural, relevant section titles based on the research topic and learnings\n- Use strategic frameworks (PESTLE, Porter's Five Forces, SWOT, etc.) where appropriate\n- Include data-driven insights with supporting evidence\n- Provide comprehensive analysis with multiple perspectives\n- Focus on actionable intelligence and strategic implications\n- Use subheadings, examples, and case studies only where they are natural and add value\n- Do NOT force subheadings/examples in every section\n\nCONTENT REQUIREMENTS:\n1. Each section must contain detailed, comprehensive content (minimum {target_words_per_section} words)
+2. Include specific data points, statistics, and examples with detailed explanations where relevant
+3. Use ONLY paragraph format - NO bullet points, NO subtitles, NO headings within content
+4. Provide analytical insights and expert commentary with detailed reasoning
+5. Include relevant industry context and background information
+6. Make content engaging and informative for professional audience
+7. EXPAND on each point with detailed explanations and examples where appropriate
+8. Include multiple paragraphs with comprehensive analysis
+9. Add industry-specific terminology and expert insights
+10. Provide detailed market trends and future projections
+11. Include competitive analysis and strategic implications
+12. Use research learnings as evidence, but do not just list or repeat them
+13. Write in flowing, narrative style with smooth transitions between paragraphs
+14. Use research data to support every major claim and insight
+\n\nCRITICAL UNIQUENESS REQUIREMENTS:\n- Each section must focus on a DIFFERENT aspect of the topic\n- Avoid repeating the same information across sections\n- Each section should have unique insights, data points, and analysis\n- Use different examples, case studies, and scenarios for each section where relevant\n- Ensure each section provides distinct value and perspective\n- Vary the analytical frameworks and methodologies used\n- Include different time periods, regions, or market segments in each section\n- Use different data sources and references for each section\n\nCHART SELECTION GUIDELINES:\n- Choose chart types based on the analytical goal of each section\n- Use 'trend' charts (line, area) for time-series data and growth analysis\n- Use 'comparison' charts (bar, horizontalBar, radar) for competitive analysis and rankings\n- Use 'composition' charts (pie, donut, stackedBar) for market segmentation and breakdowns\n- Use 'correlation' charts (scatter, bubble, heatmap) for relationship analysis\n- Use 'distribution' charts (histogram, boxPlot, violinPlot) for statistical analysis\n- Use 'flow' charts (waterfall, funnel, flowchart) for process and conversion analysis\n- Use 'none' for sections that don't require visual data representation\n\nCHART DATA EXAMPLES:\n- Bar chart: {{\"labels\": [\"A\", \"B\", \"C\"], \"values\": [10, 20, 30]}}\n- Horizontal bar: {{\"labels\": [\"A\", \"B\", \"C\"], \"values\": [10, 20, 30]}}\n- Line chart: {{\"labels\": [\"2020\", \"2021\", \"2022\"], \"values\": [100, 120, 140]}}\n- Pie chart: {{\"labels\": [\"Red\", \"Blue\", \"Green\"], \"values\": [30, 40, 30]}}\n- Donut chart: {{\"labels\": [\"Red\", \"Blue\", \"Green\"], \"values\": [30, 40, 30]}}\n- Scatter plot: {{\"labels\": [\"Point1\", \"Point2\", \"Point3\"], \"x_values\": [1, 2, 3], \"y_values\": [10, 20, 30]}}\n- Area chart: {{\"labels\": [\"2020\", \"2021\", \"2022\"], \"values\": [100, 120, 140]}}\n- Stacked bar: {{\"labels\": [\"Q1\", \"Q2\", \"Q3\"], \"series\": [{{\"name\": \"Product A\", \"values\": [10, 15, 20]}}, {{\"name\": \"Product B\", \"values\": [5, 12, 18]}}]}}\n- Multi-line: {{\"labels\": [\"Jan\", \"Feb\", \"Mar\"], \"series\": [{{\"name\": \"Revenue\", \"values\": [100, 120, 140]}}, {{\"name\": \"Profit\", \"values\": [20, 25, 30]}}]}}\n- Radar chart: {{\"labels\": [\"Quality\", \"Price\", \"Service\", \"Innovation\", \"Brand\"], \"values\": [85, 70, 90, 75, 80]}}\n- Bubble chart: {{\"labels\": [\"A\", \"B\", \"C\"], \"x_values\": [10, 20, 30], \"y_values\": [5, 15, 25], \"sizes\": [20, 40, 60]}}\n- Heatmap: {{\"labels\": [\"Q1\", \"Q2\", \"Q3\", \"Q4\"], \"categories\": [\"North\", \"South\", \"East\", \"West\"], \"values\": [[10, 20, 30, 40], [15, 25, 35, 45], [20, 30, 40, 50], [25, 35, 45, 55]]}}\n- Waterfall chart: {{\"labels\": [\"Start\", \"Revenue\", \"Costs\", \"Taxes\", \"End\"], \"values\": [100, 50, -30, -10, 110]}}\n- Funnel chart: {{\"labels\": [\"Leads\", \"Qualified\", \"Proposals\", \"Negotiations\", \"Closed\"], \"values\": [1000, 800, 600, 400, 200]}}\n- Gauge chart: {{\"value\": 75, \"max\": 100, \"label\": \"Performance\"}}\n- Tree map: {{\"labels\": [\"Category A\", \"Category B\", \"Category C\"], \"values\": [40, 30, 30], \"subcategories\": [[\"A1\", \"A2\"], [\"B1\", \"B2\"], [\"C1\", \"C2\"]]}}\n- Sunburst chart: {{\"labels\": [\"Root\", \"Branch1\", \"Branch2\"], \"values\": [100, 60, 40], \"children\": [[\"Leaf1\", \"Leaf2\"], [\"Leaf3\", \"Leaf4\"]]}}\n- Candlestick: {{\"labels\": [\"Day1\", \"Day2\", \"Day3\"], \"open\": [100, 105, 110], \"high\": [110, 115, 120], \"low\": [95, 100, 105], \"close\": [105, 110, 115]}}\n- Box plot: {{\"labels\": [\"Group A\", \"Group B\", \"Group C\"], \"data\": [[10, 15, 20, 25, 30], [12, 18, 22, 28, 35], [8, 12, 18, 24, 32]]}}\n- Violin plot: {{\"labels\": [\"Group A\", \"Group B\"], \"data\": [[10, 15, 20, 25, 30], [12, 18, 22, 28, 35]]}}\n- Histogram: {{\"labels\": [\"0-10\", \"11-20\", \"21-30\", \"31-40\"], \"values\": [5, 12, 8, 3]}}\n- Pareto chart: {{\"labels\": [\"Issue A\", \"Issue B\", \"Issue C\", \"Issue D\"], \"values\": [40, 30, 20, 10], \"cumulative\": [40, 70, 90, 100]}}\n- Empty: {{}}\n\nJSON RULES:\n1. All property names must be in double quotes\n2. All string values must be in double quotes\n3. Use commas between properties, not after the last one\n4. Escape quotes in content with backslash: \\"\n5. Use \\n for line breaks in content\n6. No trailing commas before }} or ]\n\nOUTPUT FORMAT:\n```json\n{{YOUR_JSON_HERE}}\n```"""
         return prompt
     
     def _get_section_templates(self, report_type: ReportType, num_sections: int) -> List[Dict[str, Any]]:
@@ -159,57 +173,14 @@ class ReportPlanner:
             {"title": "Executive Summary", "chart_type": "none"}
         ]
         
-        # Dynamic section suggestions based on report type
-        if report_type == ReportType.COMPANY_ANALYSIS:
-            dynamic_suggestions = [
-                "Company Overview & History",
-                "Financial Performance & Growth", 
-                "Market Position & Share",
-                "Product Portfolio Analysis",
-                "Competitive Landscape",
-                "Innovation & Future Outlook",
-                "Risk Assessment",
-                "Strategic Recommendations"
-            ]
-        elif report_type == ReportType.MARKET_RESEARCH:
-            dynamic_suggestions = [
-                "Market Overview",
-                "Market Size & Growth",
-                "Market Segmentation",
-                "Competitive Analysis",
-                "Customer Analysis",
-                "Trend Analysis",
-                "Market Opportunities",
-                "Strategic Recommendations"
-            ]
-        else:
-            # Generic suggestions
-            dynamic_suggestions = [
-                "Background & Context",
-                "Key Findings",
-                "Trend Analysis",
-                "Comparative Analysis",
-                "Impact Assessment",
-                "Future Projections",
-                "Strategic Recommendations"
-            ]
-        
         # Add dynamic sections (excluding Executive Summary)
         remaining_sections = num_sections - 1
         for i in range(remaining_sections):
-            if i < len(dynamic_suggestions):
-                # Suggest chart types based on section content
-                chart_type = self._suggest_chart_type(dynamic_suggestions[i])
-                base_sections.append({
-                    "title": dynamic_suggestions[i],
-                    "chart_type": chart_type
-                })
-            else:
-                # Generic dynamic section
-                base_sections.append({
-                    "title": f"Analysis Section {i+1}",
-                    "chart_type": "bar"
-                })
+            # Generic dynamic section - let AI determine the actual titles
+            base_sections.append({
+                "title": f"Analysis Section {i+1}",
+                "chart_type": "none"  # Let AI determine chart type based on content
+            })
         
         return base_sections
     
@@ -643,71 +614,29 @@ class ReportPlanner:
         """Provide a fallback blueprint when AI generation fails."""
         print("  📝 Using fallback blueprint")
         
-        # Generate a simple but comprehensive fallback with fixed Executive Summary
+        # Generate a simple but comprehensive fallback with fixed Executive Summary only
         sections = [
             {
                 "title": "Executive Summary",
                 "content": self._generate_fixed_executive_summary(query, report_type),
                 "chart_type": "none",
                 "chart_data": {}
-            },
-            {
-                "title": "Market Analysis",
-                "content": "**Market Overview:** The market demonstrates significant growth potential with diverse competitive dynamics. Understanding these factors is crucial for strategic decision-making. **Key Trends:** Recent market analysis reveals several emerging trends that are reshaping the competitive landscape. **Growth Drivers:** Multiple factors are contributing to market expansion, including technological innovation, changing consumer preferences, and regulatory developments.",
-                "chart_type": "bar",
-                "chart_data": {
-                    "labels": ["Segment A", "Segment B", "Segment C", "Segment D"],
-                    "values": [30, 25, 20, 25]
-                }
-            },
-            {
-                "title": "Competitive Landscape",
-                "content": "**Competitive Analysis:** The competitive landscape is characterized by both established players and emerging disruptors. **Market Share Distribution:** Current market share analysis shows a fragmented landscape with opportunities for consolidation. **Competitive Advantages:** Key players differentiate through technology, customer service, and strategic partnerships.",
-                "chart_type": "radar",
-                "chart_data": {
-                    "labels": ["Technology", "Market Share", "Customer Service", "Innovation", "Brand Recognition"],
-                    "values": [85, 70, 90, 75, 80]
-                }
-            },
-            {
-                "title": "Financial Performance",
-                "content": "**Revenue Analysis:** Financial performance shows strong growth trends with improving profitability margins. **Cost Structure:** Operational efficiency improvements are driving cost reductions across key business areas. **Investment Returns:** Strategic investments are delivering positive returns and supporting future growth initiatives.",
-                "chart_type": "waterfall",
-                "chart_data": {
-                    "labels": ["Start", "Revenue", "Costs", "Taxes", "End"],
-                    "values": [100, 50, -30, -10, 110]
-                }
-            },
-            {
-                "title": "Sales Pipeline",
-                "content": "**Lead Generation:** The sales pipeline demonstrates strong lead generation capabilities with high conversion rates. **Conversion Process:** Each stage of the sales funnel shows optimized processes and clear progression metrics. **Revenue Impact:** Pipeline improvements are directly contributing to revenue growth and market expansion.",
-                "chart_type": "funnel",
-                "chart_data": {
-                    "labels": ["Leads", "Qualified", "Proposals", "Negotiations", "Closed"],
-                    "values": [1000, 800, 600, 400, 200]
-                }
-            },
-            {
-                "title": "Trend Analysis",
-                "content": "**Growth Trends:** Recent years have shown consistent growth patterns with some seasonal variations. Future projections indicate continued expansion. **Technology Impact:** Digital transformation is driving fundamental changes in market dynamics. **Customer Behavior:** Shifting preferences are creating new opportunities and challenges.",
-                "chart_type": "line",
-                "chart_data": {
-                    "labels": ["2020", "2021", "2022", "2023", "2024"],
-                    "values": [100, 115, 130, 145, 160]
-                }
-            },
-            {
-                "title": "Strategic Recommendations",
-                "content": "**Action Items:** Based on the analysis, key recommendations include market expansion, technology investment, and strategic partnerships. **Implementation Roadmap:** A phased approach is recommended with clear milestones and success metrics. **Risk Mitigation:** Comprehensive risk assessment frameworks should be implemented.",
-                "chart_type": "none",
-                "chart_data": {}
             }
         ]
         
+        # Add minimal sections without predefined data
+        for i in range(7):  # Add 7 more sections
+            sections.append({
+                "title": f"Analysis Section {i+1}",
+                "content": f"**Section {i+1} Overview:** This section provides analysis and insights related to the query: {query}. **Key Points:** Detailed analysis will be generated based on research findings. **Conclusions:** Strategic insights and recommendations will be provided.",
+                "chart_type": "none",  # No predefined chart data
+                "chart_data": {}
+            })
+        
         return {"sections": sections} 
 
-    def _add_fixed_executive_summary(self, json_data: Dict[str, Any], query: str, report_type: ReportType) -> Dict[str, Any]:
-        """Add a fixed Executive Summary to the report blueprint."""
+    def _add_dynamic_executive_summary(self, json_data: Dict[str, Any], query: str, report_type: ReportType, learnings: Optional[list] = None, source_metadata: Optional[list] = None) -> Dict[str, Any]:
+        """Add a dynamic Executive Summary to the report blueprint based on real research data."""
         if not isinstance(json_data, dict) or 'sections' not in json_data:
             return json_data
         
@@ -720,11 +649,11 @@ class ReportPlanner:
         if not executive_summary_section:
             return json_data
         
-        # Create fixed Executive Summary (150-200 words) following the specified structure
-        executive_summary = self._generate_fixed_executive_summary(query, report_type)
+        # Generate dynamic Executive Summary based on real data
+        executive_summary = self._generate_dynamic_executive_summary(query, report_type, learnings, source_metadata)
         executive_summary_section['content'] = executive_summary
         
-        # Chart type diversity logic
+        # Chart type diversity logic - use real data for chart selection
         chart_catalog = get_chart_catalog()
         available_types = list(chart_catalog.keys())
         used_types = set()
@@ -735,11 +664,12 @@ class ReportPlanner:
             content_length = len(section.get('content', '').split())
             should_include = self._should_include_chart(section['title'], content_length)
             if should_include:
-                # Suggest a diverse chart type
+                # Suggest a diverse chart type based on real data
                 suggested_type = self._suggest_chart_type(section['title'], used_types, available_types)
                 section['chart_type'] = suggested_type
                 used_types.add(suggested_type)
-                section['chart_data'] = self._generate_chart_data_for_type(suggested_type, section['title'])
+                # Chart data will be generated from real learnings in the main process
+                section['chart_data'] = {}
             else:
                 section['chart_type'] = 'none'
                 section['chart_data'] = {}
@@ -747,253 +677,51 @@ class ReportPlanner:
     
     def _generate_chart_data_for_type(self, chart_type: str, section_title: str) -> Dict[str, Any]:
         """Generate appropriate chart data based on chart type and section context."""
-        title_lower = section_title.lower()
+        # Return empty data - let Firecrawl research provide real data
+        return {}
+    
+    def _generate_dynamic_executive_summary(self, query: str, report_type: ReportType, learnings: Optional[list] = None, source_metadata: Optional[list] = None) -> str:
+        """Generate a dynamic Executive Summary based on real research data, with multi-paragraph, well-aligned content and bullet points."""
+        bullets = ['•', '‣', '→']
+        bullet_cycle = (b for b in bullets)
+
+        # Paragraph 1: Overview
+        overview = f"This comprehensive {report_type.value.replace('_', ' ')} report analyzes {query}, providing critical insights into market dynamics, competitive landscape, and strategic opportunities."
         
-        # Generate unique seed based on section title
-        seed = int(hashlib.md5(section_title.encode()).hexdigest()[:8], 16)
+        # Paragraph 2: Data sources
+        source_info = ""
+        if source_metadata and len(source_metadata) > 0:
+            high_quality_sources = len([s for s in source_metadata if s.get("reliability_score", 0) > 0.7])
+            source_info = f"The analysis is based on research from {len(source_metadata)} authoritative sources, including {high_quality_sources} high-quality sources."
         
-        # Use seed to generate varied data
-        def get_varied_values(base_values, multiplier=1.0):
-            return [int(v * multiplier * (1 + (seed % 100) / 1000)) for v in base_values]
+        # Paragraph 3: Key findings (bulleted)
+        key_findings = []
+        if learnings and len(learnings) > 0:
+            for i, learning in enumerate(learnings[:3]):
+                if len(learning) > 30:
+                    bullet = next(bullet_cycle, '•')
+                    key_findings.append(f"{bullet} {learning[:120].strip()}" + ("..." if len(learning) > 120 else ""))
+        if not key_findings:
+            key_findings = [
+                f"{bullets[0]} The {query.lower()} market demonstrates significant growth potential with evolving competitive dynamics.",
+                f"{bullets[1]} Digital transformation and innovation are driving fundamental changes in market structure.",
+                f"{bullets[2]} Multiple opportunities exist for market participants to capture value and gain competitive advantage."
+            ]
         
-        if chart_type == 'bar':
-            # Different categories based on section content
-            if 'market' in title_lower or 'competitive' in title_lower:
-                labels = ["Market Leader", "Challenger", "Follower", "Niche Player"]
-                values = get_varied_values([45, 30, 15, 10])
-            elif 'financial' in title_lower or 'performance' in title_lower:
-                labels = ["Revenue", "Profit", "Growth", "Efficiency"]
-                values = get_varied_values([35, 25, 20, 20])
-            elif 'customer' in title_lower or 'user' in title_lower:
-                labels = ["High Value", "Medium Value", "Low Value", "Potential"]
-                values = get_varied_values([30, 35, 20, 15])
-            else:
-                labels = ["Category A", "Category B", "Category C", "Category D"]
-                values = get_varied_values([30, 25, 20, 25])
-            
-            return {"labels": labels, "values": values}
-            
-        elif chart_type == 'horizontalBar':
-            # Similar to bar but with different labels for better horizontal display
-            if 'market' in title_lower or 'competitive' in title_lower:
-                labels = ["Market Leader", "Challenger", "Follower", "Niche Player"]
-                values = get_varied_values([45, 30, 15, 10])
-            elif 'financial' in title_lower or 'performance' in title_lower:
-                labels = ["Revenue Growth", "Profit Margin", "Market Share", "Customer Satisfaction"]
-                values = get_varied_values([35, 25, 20, 20])
-            elif 'customer' in title_lower or 'user' in title_lower:
-                labels = ["High Value Customers", "Medium Value Customers", "Low Value Customers", "Potential Customers"]
-                values = get_varied_values([30, 35, 20, 15])
-            else:
-                labels = ["Primary Segment", "Secondary Segment", "Tertiary Segment", "Emerging Segment"]
-                values = get_varied_values([30, 25, 20, 25])
-            
-            return {"labels": labels, "values": values}
-            
-        elif chart_type == 'line':
-            # Different time periods and trends
-            if 'trend' in title_lower or 'growth' in title_lower:
-                labels = ["2019", "2020", "2021", "2022", "2023", "2024"]
-                base_values = [80, 85, 95, 110, 125, 140]
-            elif 'performance' in title_lower:
-                labels = ["Q1", "Q2", "Q3", "Q4"]
-                base_values = [100, 115, 130, 145]
-            else:
-                labels = ["2020", "2021", "2022", "2023", "2024"]
-                base_values = [100, 115, 130, 145, 160]
-            
-            values = get_varied_values(base_values, 0.8 + (seed % 40) / 100)
-            return {"labels": labels, "values": values}
-            
-        elif chart_type == 'pie':
-            # Different segments based on content
-            if 'market' in title_lower or 'segmentation' in title_lower:
-                labels = ["Enterprise", "SMB", "Consumer", "Government"]
-                values = get_varied_values([40, 30, 20, 10])
-            elif 'revenue' in title_lower or 'financial' in title_lower:
-                labels = ["Product Sales", "Services", "Licensing", "Support"]
-                values = get_varied_values([50, 25, 15, 10])
-            else:
-                labels = ["Segment A", "Segment B", "Segment C", "Segment D"]
-                values = get_varied_values([35, 30, 20, 15])
-            
-            return {"labels": labels, "values": values}
-            
-        elif chart_type == 'donut':
-            # Similar to pie but with different labels for donut visualization
-            if 'market' in title_lower or 'segmentation' in title_lower:
-                labels = ["Enterprise Solutions", "SMB Solutions", "Consumer Products", "Government Contracts"]
-                values = get_varied_values([40, 30, 20, 10])
-            elif 'revenue' in title_lower or 'financial' in title_lower:
-                labels = ["Core Products", "Professional Services", "Licensing Revenue", "Support Services"]
-                values = get_varied_values([50, 25, 15, 10])
-            elif 'customer' in title_lower or 'user' in title_lower:
-                labels = ["Premium Users", "Standard Users", "Basic Users", "Trial Users"]
-                values = get_varied_values([35, 30, 20, 15])
-            else:
-                labels = ["Primary Market", "Secondary Market", "Tertiary Market", "Emerging Market"]
-                values = get_varied_values([35, 30, 20, 15])
-            
-            return {"labels": labels, "values": values}
-            
-        elif chart_type == 'radar':
-            # Different metrics based on section
-            if 'competitive' in title_lower:
-                labels = ["Market Share", "Innovation", "Customer Service", "Price", "Quality"]
-                values = get_varied_values([85, 70, 90, 75, 80])
-            elif 'performance' in title_lower:
-                labels = ["Efficiency", "Quality", "Speed", "Cost", "Innovation"]
-                values = get_varied_values([80, 85, 75, 70, 90])
-            else:
-                labels = ["Quality", "Price", "Service", "Innovation", "Brand"]
-                values = get_varied_values([85, 70, 90, 75, 80])
-            
-            return {"labels": labels, "values": values}
-            
-        elif chart_type == 'waterfall':
-            # Different financial scenarios
-            if 'financial' in title_lower:
-                labels = ["Revenue", "Costs", "Taxes", "Net Profit"]
-                values = get_varied_values([100, -60, -15, 25])
-            else:
-                labels = ["Start", "Revenue", "Costs", "Taxes", "End"]
-                values = get_varied_values([100, 50, -30, -10, 110])
-            
-            return {"labels": labels, "values": values}
-            
-        elif chart_type == 'funnel':
-            # Different conversion scenarios
-            if 'sales' in title_lower:
-                labels = ["Leads", "Qualified", "Proposals", "Negotiations", "Closed"]
-                values = get_varied_values([1000, 800, 600, 400, 200])
-            elif 'marketing' in title_lower:
-                labels = ["Awareness", "Interest", "Consideration", "Purchase", "Retention"]
-                values = get_varied_values([1200, 900, 700, 500, 300])
-            else:
-                labels = ["Stage 1", "Stage 2", "Stage 3", "Stage 4", "Stage 5"]
-                values = get_varied_values([1000, 800, 600, 400, 200])
-            
-            return {"labels": labels, "values": values}
-            
-        elif chart_type == 'scatter':
-            # Different correlation scenarios
-            labels = ["Point A", "Point B", "Point C", "Point D", "Point E"]
-            x_values = get_varied_values([10, 20, 30, 40, 50])
-            y_values = get_varied_values([5, 15, 25, 35, 45])
-            sizes = get_varied_values([100, 200, 150, 300, 250])
-            
-            return {"labels": labels, "x_values": x_values, "y_values": y_values, "sizes": sizes}
-            
-        elif chart_type == 'heatmap':
-            # Different regional/quarterly data
-            labels = ["Q1", "Q2", "Q3", "Q4"]
-            categories = ["North", "South", "East", "West"]
-            base_values = [[10, 20, 30, 40], [15, 25, 35, 45], [20, 30, 40, 50], [25, 35, 45, 55]]
-            values = [[int(v * (1 + (seed % 50) / 1000)) for v in row] for row in base_values]
-            
-            return {"labels": labels, "categories": categories, "values": values}
-            
-        elif chart_type == 'gauge':
-            # Different performance metrics
-            if 'efficiency' in title_lower:
-                value = 75 + (seed % 20)
-                label = "Efficiency Score"
-            elif 'performance' in title_lower:
-                value = 80 + (seed % 15)
-                label = "Performance Score"
-            else:
-                value = 70 + (seed % 25)
-                label = "Overall Score"
-            
-            return {"value": value, "max": 100, "label": label}
-            
-        elif chart_type == 'stackedBar':
-            # Different product/market data
-            labels = ["Q1", "Q2", "Q3", "Q4"]
-            series = [
-                {"name": "Product A", "values": get_varied_values([10, 15, 20, 25])},
-                {"name": "Product B", "values": get_varied_values([5, 12, 18, 22])}
-            ]
-            return {"labels": labels, "series": series}
-            
-        elif chart_type == 'multiLine':
-            # Different metric comparisons
-            labels = ["Jan", "Feb", "Mar", "Apr", "May"]
-            series = [
-                {"name": "Revenue", "values": get_varied_values([100, 120, 140, 160, 180])},
-                {"name": "Profit", "values": get_varied_values([20, 25, 30, 35, 40])}
-            ]
-            return {"labels": labels, "series": series}
-            
-        elif chart_type == 'bubble':
-            # Different market analysis
-            labels = ["Market A", "Market B", "Market C", "Market D"]
-            x_values = get_varied_values([10, 20, 30, 40])
-            y_values = get_varied_values([5, 15, 25, 35])
-            sizes = get_varied_values([200, 300, 250, 350])
-            
-            return {"labels": labels, "x_values": x_values, "y_values": y_values, "sizes": sizes}
-            
-        elif chart_type == 'candlestick':
-            # Different trading data
-            labels = ["Day1", "Day2", "Day3", "Day4", "Day5"]
-            open_prices = get_varied_values([100, 105, 110, 108, 112])
-            high_prices = get_varied_values([110, 115, 120, 118, 122])
-            low_prices = get_varied_values([95, 100, 105, 103, 107])
-            close_prices = get_varied_values([105, 110, 115, 113, 117])
-            
-            return {"labels": labels, "open": open_prices, "high": high_prices, "low": low_prices, "close": close_prices}
-            
-        elif chart_type == 'boxPlot':
-            # Different statistical data
-            labels = ["Group A", "Group B", "Group C", "Group D"]
-            data = [
-                get_varied_values([10, 15, 20, 25, 30]),
-                get_varied_values([12, 18, 22, 28, 35]),
-                get_varied_values([8, 12, 18, 24, 32]),
-                get_varied_values([15, 20, 25, 30, 35])
-            ]
-            return {"labels": labels, "data": data}
-            
-        elif chart_type == 'histogram':
-            # Different distribution data
-            labels = ["0-10", "11-20", "21-30", "31-40", "41-50"]
-            values = get_varied_values([5, 12, 8, 3, 2])
-            return {"labels": labels, "values": values}
-            
-        elif chart_type == 'pareto':
-            # Different issue analysis
-            labels = ["Issue A", "Issue B", "Issue C", "Issue D", "Issue E"]
-            values = get_varied_values([40, 30, 20, 10, 5])
-            cumulative = []
-            total = sum(values)
-            running_total = 0
-            for value in values:
-                running_total += value
-                cumulative.append((running_total / total) * 100)
-            
-            return {"labels": labels, "values": values, "cumulative": cumulative}
-            
-        elif chart_type == 'flowchart':
-            # Standard flowchart data
-            return {
-                "nodes": [
-                    {"id": "start", "label": "Start", "type": "start"},
-                    {"id": "process1", "label": "Process Step 1", "type": "process"},
-                    {"id": "decision", "label": "Decision Point", "type": "decision"},
-                    {"id": "process2", "label": "Process Step 2", "type": "process"},
-                    {"id": "end", "label": "End", "type": "end"}
-                ],
-                "connections": [
-                    {"from": "start", "to": "process1", "label": "Begin"},
-                    {"from": "process1", "to": "decision", "label": "Evaluate"},
-                    {"from": "decision", "to": "process2", "label": "Yes"},
-                    {"from": "decision", "to": "end", "label": "No"},
-                    {"from": "process2", "to": "end", "label": "Complete"}
-                ]
-            }
-        else:
-            return {}
+        # Paragraph 4: Recommendations (bulleted)
+        recommendations = [
+            f"{bullets[0]} Develop differentiated value propositions that address evolving customer needs and market gaps.",
+            f"{bullets[1]} Prioritize digital transformation initiatives to enhance operational efficiency and customer engagement.",
+            f"{bullets[2]} Forge strategic alliances and partnerships to expand market reach and capabilities."
+        ]
+        
+        # Compose the executive summary
+        summary = overview + "\n\n"
+        if source_info:
+            summary += source_info + "\n\n"
+        summary += "Key Findings:\n" + "\n".join(key_findings) + "\n\n"
+        summary += "Recommendations:\n" + "\n".join(recommendations)
+        return summary
     
     def _generate_fixed_executive_summary(self, query: str, report_type: ReportType) -> str:
         """Generate a fixed Executive Summary with the specified structure (150-200 words)."""

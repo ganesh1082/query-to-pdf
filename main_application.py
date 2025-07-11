@@ -1,4 +1,5 @@
-# query-to-pdf/main_application.py
+# Deprecated: All main logic is now in index.py using EnhancedPDFGenerator.
+# This file is retained for reference only and is no longer used.
 
 import os
 import re
@@ -22,6 +23,7 @@ from typst_renderer import render_to_pdf_with_typst
 
 # Import Firecrawl integration
 from firecrawl_integration import FirecrawlReportGenerator
+from enhanced_firecrawl_integration import EnhancedFirecrawlReportGenerator
 
 class ProfessionalReportGenerator:
     """Orchestrates the AI-driven report generation with Typst following the new workflow."""
@@ -30,14 +32,22 @@ class ProfessionalReportGenerator:
         self.report_planner = ReportPlanner(api_key=gemini_api_key)
         self.data_visualizer = PremiumVisualizationGenerator(brand_colors={"primary": "#0D203D", "accent": "#4A90E2"})
         
-        # Initialize Firecrawl generator
+        # Initialize Firecrawl generators
         self.firecrawl_generator: Optional[FirecrawlReportGenerator] = None
+        self.enhanced_firecrawl_generator: Optional[EnhancedFirecrawlReportGenerator] = None
         try:
-            self.firecrawl_generator = FirecrawlReportGenerator(gemini_api_key)
-            print("✅ Firecrawl generator initialized successfully")
+            # Try enhanced generator first
+            self.enhanced_firecrawl_generator = EnhancedFirecrawlReportGenerator(gemini_api_key)
+            print("✅ Enhanced Firecrawl generator initialized successfully")
         except Exception as e:
-            print(f"⚠️ Firecrawl generator initialization failed: {e}")
-            self.firecrawl_generator = None
+            print(f"⚠️ Enhanced Firecrawl generator initialization failed: {e}")
+            try:
+                # Fallback to original generator
+                self.firecrawl_generator = FirecrawlReportGenerator(gemini_api_key)
+                print("✅ Original Firecrawl generator initialized successfully")
+            except Exception as e2:
+                print(f"⚠️ Original Firecrawl generator initialization failed: {e2}")
+                self.firecrawl_generator = None
 
     def _get_template_colors(self, template: str) -> Dict[str, str]:
         """Extract color palette from the specified template."""
@@ -81,19 +91,42 @@ class ProfessionalReportGenerator:
         """Step 1: Collect learnings from Firecrawl URL"""
         print("\n🔍 Step 1: Collecting learnings from Firecrawl...")
         
-        if not self.firecrawl_generator:
-            print("❌ Firecrawl generator not available")
+        # Try enhanced generator first, then fallback to original
+        generator = self.enhanced_firecrawl_generator or self.firecrawl_generator
+        
+        if not generator:
+            print("❌ No Firecrawl generator available")
             return {"learnings": [], "sources": [], "success": False}
         
         try:
-            research_result = await self.firecrawl_generator.firecrawl_research.deep_research(query)
-            
-            learnings = research_result.get("learnings", [])
-            sources = research_result.get("source_metadata", [])
-            
-            print(f"📊 Firecrawl research completed:")
-            print(f"   - Learnings found: {len(learnings)}")
-            print(f"   - Sources found: {len(sources)}")
+            if self.enhanced_firecrawl_generator:
+                print("🚀 Using enhanced Firecrawl research...")
+                research_result = await self.enhanced_firecrawl_generator.collect_learnings_only(query)
+                
+                learnings = research_result.get("learnings", [])
+                sources = research_result.get("sources", [])
+                comprehensive_report = research_result.get("comprehensive_report", "")
+                
+                print(f"📊 Enhanced Firecrawl research completed:")
+                print(f"   - Learnings found: {len(learnings)}")
+                print(f"   - Sources found: {len(sources)}")
+                print(f"   - Comprehensive report: {len(comprehensive_report)} characters")
+                
+            else:
+                print("🔄 Using original Firecrawl research...")
+                if self.firecrawl_generator and self.firecrawl_generator.firecrawl_research:
+                    research_result = await self.firecrawl_generator.firecrawl_research.deep_research(query)
+                    
+                    learnings = research_result.get("learnings", [])
+                    sources = research_result.get("source_metadata", [])
+                    comprehensive_report = ""
+                    
+                    print(f"📊 Original Firecrawl research completed:")
+                    print(f"   - Learnings found: {len(learnings)}")
+                    print(f"   - Sources found: {len(sources)}")
+                else:
+                    print("❌ Original Firecrawl generator not properly initialized")
+                    return {"learnings": [], "sources": [], "success": False}
             
             # Check if we have meaningful learnings
             if not learnings or len(learnings) == 0:
@@ -112,7 +145,9 @@ class ProfessionalReportGenerator:
                 "learnings": filtered_learnings,
                 "sources": sources,
                 "success": True,
-                "requests_used": research_result.get("requests_used", 0)
+                "requests_used": research_result.get("requests_used", 0),
+                "comprehensive_report": comprehensive_report,
+                "method": research_result.get("method", "unknown")
             }
             
         except Exception as e:
@@ -145,24 +180,32 @@ class ProfessionalReportGenerator:
             template_colors = self._get_template_colors(template)
             self.data_visualizer = PremiumVisualizationGenerator(brand_colors=template_colors)
             
-            print("\n📊 Generating visualizations from learnings...")
-            for section in blueprint.get("sections", []):
-                # Convert content to Typst format
-                if "content" in section:
-                    section["content"] = self._convert_content_to_typst(section["content"])
+            # Use Firecrawl integration for chart generation if available
+            if self.enhanced_firecrawl_generator:
+                print("\n📊 Generating visualizations using enhanced Firecrawl integration...")
+                await self.enhanced_firecrawl_generator._generate_visualizations(blueprint)
+            elif self.firecrawl_generator:
+                print("\n📊 Generating visualizations using original Firecrawl integration...")
+                await self.firecrawl_generator._generate_visualizations(blueprint)
+            else:
+                print("\n📊 Generating visualizations using direct chart creation...")
+                for section in blueprint.get("sections", []):
+                    # Convert content to Typst format
+                    if "content" in section:
+                        section["content"] = self._convert_content_to_typst(section["content"])
 
-                chart_type = section.get("chart_type")
-                if chart_type and chart_type != "none":
-                    print(f"  🎨 Generating '{chart_type}' chart for: {section['title']}...")
-                    try:
-                        # Use the PDF-specific chart creation method
-                        chart_path = self.data_visualizer.create_chart_for_pdf(section)
-                        section["chart_path"] = chart_path
-                    except Exception as e:
-                        print(f"  ⚠️ Error generating chart for '{section['title']}': {e}")
+                    chart_type = section.get("chart_type")
+                    if chart_type and chart_type != "none":
+                        print(f"  🎨 Generating '{chart_type}' chart for: {section['title']}...")
+                        try:
+                            # Use the PDF-specific chart creation method
+                            chart_path = self.data_visualizer.create_chart_for_pdf(section)
+                            section["chart_path"] = chart_path
+                        except Exception as e:
+                            print(f"  ⚠️ Error generating chart for '{section['title']}': {e}")
+                            section["chart_path"] = ""
+                    else:
                         section["chart_path"] = ""
-                else:
-                    section["chart_path"] = ""
             
             return {
                 "success": True,
@@ -273,38 +316,60 @@ class ProfessionalReportGenerator:
         print(f"🚀 Starting comprehensive report generation for: {query}")
         print(f"📊 Configuration: {page_count} pages, template: {template}, web research: {use_web_research}")
         
-        # Step 1: Collect learnings from Firecrawl
+        if use_web_research and self.firecrawl_generator:
+            # Use the Firecrawl integration for web research
+            print("🌐 Using Firecrawl integration for web research...")
+            try:
+                result = await self.firecrawl_generator.generate_report_from_web_research(
+                    query=query,
+                    page_count=page_count,
+                    report_type=ReportType.MARKET_RESEARCH,
+                    template=template
+                )
+                
+                if result["success"]:
+                    print(f"✅ Firecrawl report generation completed successfully!")
+                    print(f"📄 PDF: {result['pdf_path']}")
+                    return {
+                        "success": True,
+                        "pdf_path": result["pdf_path"],
+                        "json_path": "",
+                        "report_data": result.get("blueprint", {}),
+                        "requests_used": result.get("requests_used", 0),
+                        "learnings_count": result.get("learnings_count", 0),
+                        "sources_count": result.get("sources_count", 0)
+                    }
+                else:
+                    print(f"❌ Firecrawl report generation failed: {result.get('error', 'Unknown error')}")
+                    # Fall back to AI-only generation
+                    print("🔄 Falling back to AI-only generation...")
+                    
+            except Exception as e:
+                print(f"❌ Firecrawl integration error: {e}")
+                print("🔄 Falling back to AI-only generation...")
+        
+        # Fallback to AI generation without web research
+        print("⚠️ Using AI generation only (no web research)")
+        
+        # Step 1: Collect learnings from Firecrawl (if available)
+        learnings = []
+        sources = []
         if use_web_research:
             firecrawl_result = await self._collect_learnings_from_firecrawl(query)
-            
-            if not firecrawl_result["success"]:
-                print("❌ Could not find useful/trustworthy data on internet")
-                return {
-                    "success": False,
-                    "error": "Could not find useful/trustworthy data on internet",
-                    "pdf_path": "",
-                    "json_path": "",
-                    "report_data": {}
-                }
-            
-            learnings = firecrawl_result["learnings"]
-            sources = firecrawl_result["sources"]
-            
-            # Check for halfway point with 0 learnings
-            halfway_point = len(learnings) // 2
-            if halfway_point > 0:
-                # Check if learnings after halfway are 0 or empty
-                later_learnings = learnings[halfway_point:]
-                if all(not learning or learning.strip() == "" for learning in later_learnings):
-                    print(f"⚠️ Found 0 learnings after halfway point, using first {halfway_point} learnings")
-                    learnings = learnings[:halfway_point]
-                    # Also filter sources accordingly if needed
-                    sources = sources[:halfway_point] if len(sources) > halfway_point else sources
-        else:
-            # Fallback to AI generation without web research
-            print("⚠️ Web research disabled, using AI generation only")
-            learnings = []
-            sources = []
+            if firecrawl_result["success"]:
+                learnings = firecrawl_result["learnings"]
+                sources = firecrawl_result["sources"]
+                
+                # Check for halfway point with 0 learnings
+                halfway_point = len(learnings) // 2
+                if halfway_point > 0:
+                    # Check if learnings after halfway are 0 or empty
+                    later_learnings = learnings[halfway_point:]
+                    if all(not learning or learning.strip() == "" for learning in later_learnings):
+                        print(f"⚠️ Found 0 learnings after halfway point, using first {halfway_point} learnings")
+                        learnings = learnings[:halfway_point]
+                        # Also filter sources accordingly if needed
+                        sources = sources[:halfway_point] if len(sources) > halfway_point else sources
         
         # Step 2: Generate report from learnings using Gemini
         report_result = await self._generate_report_from_learnings(query, learnings, sources, page_count, template)
