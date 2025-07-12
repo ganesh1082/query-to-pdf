@@ -534,7 +534,8 @@ Provide your response in JSON format:
             
             print(f"Found {len(contents)} sources ({len(filtered_content)} above reliability threshold)")
             
-            return learnings, learning_reliabilities, [metadata for _, metadata in filtered_content]
+            # Return ALL source metadata, not just filtered ones
+            return learnings, learning_reliabilities, source_metadata
             
         except Exception as e:
             print(f"Error processing search results: {e}")
@@ -799,7 +800,7 @@ Generate the complete research report now:"""
             query, all_learnings, all_source_metadata, all_learning_reliabilities
         )
         
-        print(f"✅ Enhanced research completed: {len(all_learnings)} learnings from {len(all_visited_urls)} sources ({self.credit_tracker['current_query_credits']} credits)")
+        print(f"✅ Enhanced research completed: {len(all_learnings)} learnings from {len(all_source_metadata)} sources ({self.credit_tracker['current_query_credits']} credits)")
         
         return {
             "learnings": all_learnings,
